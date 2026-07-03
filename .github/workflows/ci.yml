@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  rust:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-gcc
+            os: ubuntu-latest
+            cc: gcc
+            cxx: g++
+          - name: linux-clang
+            os: ubuntu-latest
+            cc: clang
+            cxx: clang++
+          - name: macos-clang
+            os: macos-latest
+            cc: clang
+            cxx: clang++
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Configure compiler
+        run: |
+          echo "CC=${{ matrix.cc }}" >> "$GITHUB_ENV"
+          echo "CXX=${{ matrix.cxx }}" >> "$GITHUB_ENV"
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Workspace tests
+        run: cargo test --workspace --all-features
+
+      - name: Rustdoc with examples
+        run: RUSTDOCFLAGS="-D warnings -D missing_docs" cargo doc --workspace --all-features --no-deps
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  native-souffle:
+    name: native-souffle-release-smoke
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ca-certificates clang gnupg wget
+          sudo wget https://souffle-lang.github.io/ppa/souffle-key.public \
+            -O /usr/share/keyrings/souffle-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/souffle-archive-keyring.gpg] https://souffle-lang.github.io/ppa/ubuntu/ stable main" \
+            | sudo tee /etc/apt/sources.list.d/souffle.list
+          sudo apt-get update
+          sudo apt-get install -y souffle
+
+      - name: Run release ignored native smoke tests
+        env:
+          CC: clang
+          CXX: clang++
+          HOST: x86_64-unknown-linux-gnu
+          TARGET: x86_64-unknown-linux-gnu
+          OUT_DIR: ${{ github.workspace }}/target/native-smoke-out
+          OPT_LEVEL: 3
+          PROFILE: release
+        run: |
+          cargo test --release -p souffle-rs --test process_smoke -- --ignored
+          cargo test --release -p souffle-rs-build --test native_smoke -- --ignored --nocapture
+
+  ffi-leak-check:
+    name: ffi-buffer-leak-check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install leak checker
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind
+
+      - name: Build FFI buffer tests
+        run: cargo test --release -p souffle-rs --lib --no-run
+
+      - name: Run FFI arena test under valgrind
+        run: |
+          test_bin="$(find target/release/deps -maxdepth 1 -type f -name 'souffle_rs-*' -perm -111 | head -n 1)"
+          valgrind --leak-check=full --show-leak-kinds=definite \
+            --errors-for-leak-kinds=definite --error-exitcode=1 "$test_bin" \
+            tests::embedded_composite_input_rows_encode_borrowed_c_abi_arena --exact

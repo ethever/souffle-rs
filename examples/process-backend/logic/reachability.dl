@@ -1,0 +1,11 @@
+.decl Edge(source:symbol, target:symbol)
+.input Edge
+
+.decl Seed(node:symbol)
+.input Seed
+
+.decl Reachable(node:symbol)
+.output Reachable
+
+Reachable(node) :- Seed(node).
+Reachable(target) :- Reachable(source), Edge(source, target).
