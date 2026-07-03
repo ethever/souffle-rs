@@ -756,6 +756,8 @@ benchmark 必须记录：
 - 如何导出到 file / SQLite。
 - 如何做 embedded 与 process backend parity。
 - 如何诊断 build/link/runtime/schema/type 错误。
+- 所有 public Rust API 的 rustdoc，包括类型语义、生命周期、错误条件、线程语义和安全边界。
+- rustdoc examples 覆盖核心 public API 用法，并作为 doc-tests 或等价 CI 检查持续验证。
 
 ## CI 与验收要求
 
