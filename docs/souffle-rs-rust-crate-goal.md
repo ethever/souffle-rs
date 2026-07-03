@@ -125,15 +125,36 @@ Raw FFI 层。
 该 crate 只绑定我们自己的 C header，例如：
 
 ```c
-typedef struct SrProgram SrProgram;
-typedef struct SrError SrError;
+typedef struct SouffleRsProgram SouffleRsProgram;
+typedef struct SouffleRsError SouffleRsError;
 
-int sr_program_new(const char* name, SrProgram** out, SrError* err);
-int sr_program_insert_row(SrProgram* program, const SrRow* row, SrError* err);
-int sr_program_run(SrProgram* program, const SrRunOptions* options, SrError* err);
-int sr_program_read_relation(SrProgram* program, const char* relation, SrRelationOut* out, SrError* err);
-void sr_program_free(SrProgram* program);
-void sr_relation_out_free(SrRelationOut* out);
+int souffle_rs_program_new(
+    const char* program_name,
+    SouffleRsProgram** program_output,
+    SouffleRsError* error
+);
+
+int souffle_rs_program_insert_row(
+    SouffleRsProgram* program,
+    const SouffleRsRow* row,
+    SouffleRsError* error
+);
+
+int souffle_rs_program_run(
+    SouffleRsProgram* program,
+    const SouffleRsRunOptions* options,
+    SouffleRsError* error
+);
+
+int souffle_rs_program_read_relation(
+    SouffleRsProgram* program,
+    const char* relation_name,
+    SouffleRsRelationOutput* relation_output,
+    SouffleRsError* error
+);
+
+void souffle_rs_program_free(SouffleRsProgram* program);
+void souffle_rs_relation_output_free(SouffleRsRelationOutput* relation_output);
 ```
 
 不要绑定 Souffle 原生 C++ API。
@@ -261,7 +282,7 @@ C ABI 必须保守：
 - 不跨 ABI 传 C++ STL。
 - 不跨 ABI 传 Rust-owned allocation 给 C++ 长期持有。
 - 不跨 ABI 抛 C++ exception。
-- 所有 C++ exception 在 wrapper 内 catch，转成 `SrError`。
+- 所有 C++ exception 在 wrapper 内 catch，转成 `SouffleRsError`。
 - 所有内存释放由创建方提供对应 free 函数。
 - ABI version 明确记录。
 
@@ -270,18 +291,18 @@ C ABI 必须保守：
 建议：
 
 ```c
-typedef enum SrValueKind {
-    SR_VALUE_NUMBER,
-    SR_VALUE_UNSIGNED,
-    SR_VALUE_FLOAT,
-    SR_VALUE_SYMBOL,
-    SR_VALUE_RECORD,
-    SR_VALUE_ADT,
-    SR_VALUE_NULLARY
-} SrValueKind;
+typedef enum SouffleRsValueKind {
+    SOUFFLE_RS_VALUE_NUMBER,
+    SOUFFLE_RS_VALUE_UNSIGNED,
+    SOUFFLE_RS_VALUE_FLOAT,
+    SOUFFLE_RS_VALUE_SYMBOL,
+    SOUFFLE_RS_VALUE_RECORD,
+    SOUFFLE_RS_VALUE_ADT,
+    SOUFFLE_RS_VALUE_NULLARY
+} SouffleRsValueKind;
 
-typedef struct SrValue {
-    SrValueKind kind;
+typedef struct SouffleRsValue {
+    SouffleRsValueKind kind;
     union {
         int64_t number;
         uint64_t unsigned_value;
@@ -290,13 +311,13 @@ typedef struct SrValue {
         uint64_t record_id;
         uint64_t adt_id;
     } as;
-} SrValue;
+} SouffleRsValue;
 
-typedef struct SrRow {
-    const char* relation;
-    const SrValue* values;
+typedef struct SouffleRsRow {
+    const char* relation_name;
+    const SouffleRsValue* values;
     size_t len;
-} SrRow;
+} SouffleRsRow;
 ```
 
 第一版可以先不暴露 `record_id` 和 `adt_id`，只支持：
@@ -310,12 +331,37 @@ typedef struct SrRow {
 建议：
 
 ```c
-int sr_program_new(const char* program_name, SrProgram** out, SrError* err);
-int sr_program_set_threads(SrProgram* program, size_t threads, SrError* err);
-int sr_program_insert_row(SrProgram* program, const SrRow* row, SrError* err);
-int sr_program_run(SrProgram* program, SrError* err);
-int sr_program_read_relation(SrProgram* program, const char* relation, SrRelationOut* out, SrError* err);
-void sr_program_free(SrProgram* program);
+int souffle_rs_program_new(
+    const char* program_name,
+    SouffleRsProgram** program_output,
+    SouffleRsError* error
+);
+
+int souffle_rs_program_set_threads(
+    SouffleRsProgram* program,
+    size_t thread_count,
+    SouffleRsError* error
+);
+
+int souffle_rs_program_insert_row(
+    SouffleRsProgram* program,
+    const SouffleRsRow* row,
+    SouffleRsError* error
+);
+
+int souffle_rs_program_run(
+    SouffleRsProgram* program,
+    SouffleRsError* error
+);
+
+int souffle_rs_program_read_relation(
+    SouffleRsProgram* program,
+    const char* relation_name,
+    SouffleRsRelationOutput* relation_output,
+    SouffleRsError* error
+);
+
+void souffle_rs_program_free(SouffleRsProgram* program);
 ```
 
 ### Output transfer
@@ -323,27 +369,28 @@ void sr_program_free(SrProgram* program);
 第一版可以用 pull model：
 
 ```c
-int sr_program_read_relation(
-    SrProgram* program,
-    const char* relation,
-    SrRelationOut* out,
-    SrError* err
+int souffle_rs_program_read_relation(
+    SouffleRsProgram* program,
+    const char* relation_name,
+    SouffleRsRelationOutput* relation_output,
+    SouffleRsError* error
 );
 ```
 
-`SrRelationOut` 包含连续 rows。Rust 调用 `sr_relation_out_free` 释放。
+`SouffleRsRelationOutput` 包含连续 rows。Rust 调用
+`souffle_rs_relation_output_free` 释放。
 
 后续可以支持 callback model：
 
 ```c
-typedef int (*SrRowCallback)(const SrRow* row, void* user_data);
+typedef int (*SouffleRsRowCallback)(const SouffleRsRow* row, void* user_data);
 
-int sr_program_for_each_row(
-    SrProgram* program,
-    const char* relation,
-    SrRowCallback callback,
+int souffle_rs_program_for_each_row(
+    SouffleRsProgram* program,
+    const char* relation_name,
+    SouffleRsRowCallback callback,
     void* user_data,
-    SrError* err
+    SouffleRsError* error
 );
 ```
 
@@ -583,11 +630,11 @@ C++ wrapper 必须 catch：
 try {
     ...
 } catch (const std::exception& e) {
-    sr_error_set(error, e.what());
-    return SR_ERR_EXCEPTION;
+    souffle_rs_error_set(error, e.what());
+    return SOUFFLE_RS_ERROR_EXCEPTION;
 } catch (...) {
-    sr_error_set(error, "unknown C++ exception");
-    return SR_ERR_EXCEPTION;
+    souffle_rs_error_set(error, "unknown C++ exception");
+    return SOUFFLE_RS_ERROR_EXCEPTION;
 }
 ```
 
