@@ -320,11 +320,21 @@ typedef struct SouffleRsRow {
 } SouffleRsRow;
 ```
 
-第一版可以先不暴露 `record_id` 和 `adt_id`，只支持：
+这个 ABI 形状从一开始就要为完整 Souffle 类型系统预留空间。`record_id` 和 `adt_id`
+不应成为长期 public API 中暴露给 Rust 用户的 opaque value；它们最多只是 C++ wrapper
+内部和 C ABI 传输层的过渡表示。safe Rust API 的完成形态必须暴露结构化的
+`Value::Record`、nested list / record 和 `Value::Adt`。
+
+最早的 toy/bootstrap milestone 可以只临时打通：
 
 - `number`
 - `symbol`
 - nullary relation
+
+但这只是为了验证 FFI、program lifecycle、relation insertion 和 relation output
+roundtrip。它不能被描述成“第一版完整能力”，也不能成为 crate 的稳定边界。只要
+`unsigned`、`float`、record/list、ADT、schema-visible subtype / union type 任一类仍未
+完成，crate 必须明确标记为 experimental / incomplete，并在 feature gap 中列出缺失项。
 
 ### Program lifecycle
 
@@ -366,7 +376,7 @@ void souffle_rs_program_free(SouffleRsProgram* program);
 
 ### Output transfer
 
-第一版可以用 pull model：
+最早的 output transfer milestone 可以用 pull model：
 
 ```c
 int souffle_rs_program_read_relation(
@@ -394,8 +404,9 @@ int souffle_rs_program_for_each_row(
 );
 ```
 
-callback model 可以减少一次性大 relation 的内存压力，但 ABI 和错误处理更复杂。MVP
-先用 pull model。
+callback model 可以减少一次性大 relation 的内存压力，但 ABI 和错误处理更复杂。
+bootstrap milestone 可以先用 pull model；complete 目标应支持大 relation 的 streaming
+或 chunked iteration。
 
 ## Rust 类型模型
 
@@ -427,22 +438,41 @@ pub struct RelationBundle {
 }
 ```
 
-第一版：
+类型支持不能按永久 feature tier 切开。阶段性实现可以有先后，但 crate 的目标版本必须
+完整覆盖 Souffle 类型系统；任何阶段性子集都只能作为 milestone，而不能作为最终 API
+边界。
+
+建议验收顺序：
+
+Bootstrap milestone：
 
 - `Value::Number`
 - `Value::Symbol`
 - nullary relation
 
-第二版：
+Primitive-complete milestone：
 
 - `Value::Unsigned`
 - `Value::Float`
+- primitive schema parity：`number`、`unsigned`、`float`、`symbol` 的 arity/type check。
 
-第三版：
+Composite-complete milestone：
 
 - `Value::Record`
-- `Value::Adt`
 - nested list/record。
+
+ADT-complete milestone：
+
+- `Value::Adt`
+- ADT variant / field schema。
+- ADT 与 record/list 编码 parity。
+
+Complete milestone：
+
+- subtype / union type 的 schema-visible 表示。
+- input relation insertion 覆盖所有支持类型。
+- output relation iteration 覆盖所有支持类型。
+- file backend 和 embedded backend 对同一 fixture 的 relation parity。
 
 ## Souffle 类型支持计划
 
@@ -523,7 +553,7 @@ Souffle record/list 通过 record table 表示。C++ wrapper 负责：
 - pack Rust nested `Value` 到 Souffle record table。
 - unpack Souffle record id 到 Rust nested `Value`。
 
-这部分是高风险，不进 MVP。
+这部分是高风险，不进最早的 toy/bootstrap milestone，但它是 complete 目标的必需项。
 
 ### ADT
 
@@ -533,7 +563,7 @@ ADT 往往也依赖 record / tag 编码。需要：
 - 或要求用户提供 schema。
 - 或在 build helper 阶段从 Souffle AST / generated metadata 中抽取 schema。
 
-这部分放在 record/list 之后。
+这部分放在 record/list 之后实现，但它是 complete 目标的必需项。
 
 ## Schema 策略
 
@@ -836,8 +866,9 @@ pub struct RelationArtifactMap {
 
 ### Records / list 类型
 
-大型 Souffle 程序可能使用 list / record / ADT 相关类型或自定义 functor。MVP 可以不读写
-这些 relation，但完整封装必须实现 record table pack/unpack，并能按 schema 正确暴露
+大型 Souffle 程序可能使用 list / record / ADT 相关类型或自定义 functor。早期真实程序
+fixture 可以临时选择不覆盖这些 relation，用来验证 build/link/run path；但这不是完整
+能力。complete 目标必须实现 record table pack/unpack，并能按 schema 正确读写和暴露
 这些值。
 
 ### Timeout 和 crash isolation
