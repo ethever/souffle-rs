@@ -1,0 +1,9 @@
+[package]
+name = "souffle-rs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Safe Rust API for embedded Souffle Datalog programs"
+
+[dependencies]

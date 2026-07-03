@@ -1,0 +1,9 @@
+[package]
+name = "souffle-rs-sys"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Raw C ABI bindings for souffle-rs"
+
+[dependencies]

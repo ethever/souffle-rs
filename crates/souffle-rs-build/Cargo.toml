@@ -1,0 +1,9 @@
+[package]
+name = "souffle-rs-build"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "build.rs helper for generating and compiling embedded Souffle programs"
+
+[dependencies]
