@@ -88,6 +88,14 @@ jobs:
           cargo test --release -p souffle-rs --test process_smoke -- --ignored
           cargo test --release -p souffle-rs-build --test native_smoke -- --ignored --nocapture
 
+      - name: Run embedded examples
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          cargo run --manifest-path examples/embedded-build/Cargo.toml
+          cargo run --manifest-path examples/embedded-auto-schema/Cargo.toml
+
   ffi-leak-check:
     name: ffi-buffer-leak-check
     runs-on: ubuntu-latest
