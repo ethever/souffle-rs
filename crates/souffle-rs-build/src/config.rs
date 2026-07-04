@@ -1593,23 +1593,14 @@ fn parse_souffle_version(output: &str) -> Option<String> {
         let line = line.trim();
         let version = line.strip_prefix("Version:").map(str::trim).unwrap_or(line);
         let token = version.split_whitespace().next()?;
-        is_semver_like(token).then(|| token.to_owned())
+        is_version_like(token).then(|| token.to_owned())
     })
 }
 
-fn is_semver_like(value: &str) -> bool {
-    let mut parts = value.split('.');
-    let Some(major) = parts.next() else {
-        return false;
-    };
-    let Some(minor) = parts.next() else {
-        return false;
-    };
-    let Some(patch) = parts.next() else {
-        return false;
-    };
-    parts.next().is_none()
-        && [major, minor, patch]
+fn is_version_like(value: &str) -> bool {
+    let parts = value.split('.').collect::<Vec<_>>();
+    (2..=3).contains(&parts.len())
+        && parts
             .into_iter()
             .all(|part| !part.is_empty() && part.chars().all(|ch| ch.is_ascii_digit()))
 }

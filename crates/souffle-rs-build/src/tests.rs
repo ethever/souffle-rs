@@ -1230,7 +1230,7 @@ fn compile_runs_souffle_generation_and_writes_metadata() {
 #[test]
 fn compile_rejects_unsupported_souffle_version_before_generation() {
     let tempdir = tempfile::tempdir().unwrap();
-    let fake_souffle = fake_souffle_version_bin(tempdir.path(), "2.4.0");
+    let fake_souffle = fake_souffle_version_bin(tempdir.path(), "2.4");
     let out_dir = tempdir.path().join("out");
     let entrypoint = tempdir.path().join("logic/main.dl");
     fs::create_dir_all(entrypoint.parent().unwrap()).unwrap();
@@ -1248,7 +1248,7 @@ fn compile_rejects_unsupported_souffle_version_before_generation() {
         BuildError::UnsupportedSouffleVersion {
             souffle_bin: fake_souffle.display().to_string(),
             expected: SUPPORTED_SOUFFLE_VERSION.to_owned(),
-            actual: "2.4.0".to_owned(),
+            actual: "2.4".to_owned(),
         }
     );
     assert!(!out_dir.exists());
