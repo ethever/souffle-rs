@@ -51,6 +51,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         .typed_api_artifact
         .as_ref()
         .expect("typed API was requested");
+    // The generated typed API is a Rust module file with inner attributes.
+    // Load it through a small module shim instead of text-including it directly.
     fs::write(
         out_dir.join("rust/reachability_mod.rs"),
         format!(

@@ -7,6 +7,8 @@
 //! both generated artifacts available through Cargo's deterministic `OUT_DIR`.
 
 mod generated {
+    // `build.rs` writes this shim; it declares `pub mod reachability` with a
+    // `#[path = ".../reachability.rs"]` attribute pointing at the generated API.
     include!(concat!(
         env!("OUT_DIR"),
         "/souffle-rs/rust/reachability_mod.rs"
