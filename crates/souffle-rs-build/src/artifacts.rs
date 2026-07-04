@@ -1139,12 +1139,7 @@ fn module_name(program_name: &str) -> String {
 }
 
 fn module_identifier(program_name: &str) -> String {
-    let module = module_name(program_name);
-    if rust_keywords().contains(module.as_str()) {
-        format!("r#{module}")
-    } else {
-        module
-    }
+    rust_identifier(module_name(program_name))
 }
 
 fn pascal_case(value: &str) -> String {
@@ -1185,11 +1180,7 @@ fn field_name(attribute_name: &str, index: usize) -> String {
         result = format!("column_{index}");
     }
 
-    if rust_keywords().contains(result.as_str()) {
-        format!("r#{result}")
-    } else {
-        result
-    }
+    rust_identifier(result)
 }
 
 fn field_names_for(relation: &RelationSchema) -> Vec<String> {
@@ -1211,6 +1202,20 @@ fn rust_keywords() -> BTreeSet<&'static str> {
     ]
     .into_iter()
     .collect()
+}
+
+fn rust_identifier(identifier: String) -> String {
+    if rust_non_raw_identifiers().contains(identifier.as_str()) {
+        format!("{identifier}_")
+    } else if rust_keywords().contains(identifier.as_str()) {
+        format!("r#{identifier}")
+    } else {
+        identifier
+    }
+}
+
+fn rust_non_raw_identifiers() -> BTreeSet<&'static str> {
+    ["crate", "self", "Self", "super"].into_iter().collect()
 }
 
 fn rust_string_literal(value: &str) -> String {
@@ -1407,6 +1412,7 @@ typedef union SouffleRsValueData {{
 
 typedef struct SouffleRsValue {{
     SouffleRsValueKind kind;
+    SouffleRsString declared_type;
     SouffleRsValueData as;
 }} SouffleRsValue;
 

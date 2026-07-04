@@ -202,7 +202,7 @@ fn decode_output_value(
             raw_value,
             definitions,
         )
-        .map(|value| Value::typed(name.clone(), value.into_untyped())),
+        .map(|value| Value::typed(name.clone(), value)),
         TypeRef::Record(fields) => decode_composite_fields(
             DecodeContext {
                 relation,
@@ -269,6 +269,22 @@ fn decode_union_value(
     raw_value: &SouffleRsValue,
     definitions: &BTreeMap<String, TypeRef>,
 ) -> Result<Value, SouffleError> {
+    if let Some(abi_declared_type) = abi_declared_type_name(raw_value)? {
+        let Some(variant) = variants.iter().find(|variant| {
+            type_ref_declared_name(variant, definitions) == Some(abi_declared_type.as_str())
+        }) else {
+            return Err(decode_error(
+                relation,
+                column,
+                format!(
+                    "declared ABI type `{abi_declared_type}` did not match union `{}`",
+                    declared_type.display_name()
+                ),
+            ));
+        };
+        return decode_output_value(relation, column, variant, output, raw_value, definitions);
+    }
+
     let mut last_error = None;
     for variant in variants {
         if abi_kind_matches_type(raw_value.kind, variant, definitions) {
@@ -290,6 +306,13 @@ fn decode_union_value(
             ),
         )
     }))
+}
+
+fn abi_declared_type_name(value: &SouffleRsValue) -> Result<Option<String>, SouffleError> {
+    if value.declared_type.len == 0 {
+        return Ok(None);
+    }
+    ffi::decode_abi_string(value.declared_type, "SouffleRsValue.declared_type").map(Some)
 }
 
 fn decode_composite_fields(
@@ -447,6 +470,7 @@ fn composite_value(
 ) -> Result<SouffleRsValue, SouffleError> {
     let mut value = SouffleRsValue {
         kind: SouffleRsValueKind::Nullary,
+        declared_type: SouffleRsString::null(),
         as_: SouffleRsValueData { unsigned_value: 0 },
     };
     let mut error = ffi::empty_error();
@@ -564,6 +588,23 @@ fn abi_kind_matches_type(
         TypeRef::Union { variants, .. } => variants
             .iter()
             .any(|variant| abi_kind_matches_type(kind, variant, definitions)),
+    }
+}
+
+fn type_ref_declared_name<'a>(
+    declared_type: &'a TypeRef,
+    definitions: &'a BTreeMap<String, TypeRef>,
+) -> Option<&'a str> {
+    match declared_type {
+        TypeRef::Adt { name, .. }
+        | TypeRef::Subtype { name, .. }
+        | TypeRef::Union { name, .. }
+        | TypeRef::Declared { name, .. } => Some(name),
+        TypeRef::Reference { name, .. } => definitions
+            .get(name)
+            .and_then(|resolved| type_ref_declared_name(resolved, definitions))
+            .or(Some(name)),
+        _ => None,
     }
 }
 

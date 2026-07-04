@@ -15,6 +15,7 @@ use super::relation_cstring;
 /// Rust-owned buffers for a borrowed `SouffleRsRow` passed to the wrapper.
 pub(crate) struct EncodedRow {
     relation_name: CString,
+    declared_types: Vec<CString>,
     symbols: Vec<CString>,
     variants: Vec<CString>,
     values: Vec<SouffleRsValue>,
@@ -60,6 +61,7 @@ pub(crate) fn encode_input_row(
 
     let mut encoded = EncodedRow {
         relation_name: relation_cstring(schema.name())?,
+        declared_types: Vec::new(),
         symbols: Vec::new(),
         variants: Vec::new(),
         values: Vec::with_capacity(row.len()),
@@ -101,54 +103,58 @@ fn encode_input_value(
             value,
             definitions,
         )?;
-        return encode_input_value(
+        let mut encoded_value = encode_input_value(
             relation,
             column,
             variant,
             value.untyped(),
             encoded,
             definitions,
-        );
+        )?;
+        if let Some(declared_type) = type_ref_declared_name(variant, definitions) {
+            attach_declared_type(relation, column, &mut encoded_value, declared_type, encoded)?;
+        }
+        return Ok(encoded_value);
     }
 
     let value = value.untyped();
     Ok(match value {
-        Value::Number(value) => SouffleRsValue {
-            kind: SouffleRsValueKind::Number,
-            as_: SouffleRsValueData { number: *value },
-        },
-        Value::Unsigned(value) => SouffleRsValue {
-            kind: SouffleRsValueKind::Unsigned,
-            as_: SouffleRsValueData {
+        Value::Number(value) => abi_value(
+            SouffleRsValueKind::Number,
+            SouffleRsValueData { number: *value },
+        ),
+        Value::Unsigned(value) => abi_value(
+            SouffleRsValueKind::Unsigned,
+            SouffleRsValueData {
                 unsigned_value: *value,
             },
-        },
-        Value::Float(value) => SouffleRsValue {
-            kind: SouffleRsValueKind::Float,
-            as_: SouffleRsValueData {
+        ),
+        Value::Float(value) => abi_value(
+            SouffleRsValueKind::Float,
+            SouffleRsValueData {
                 float_value: *value,
             },
-        },
+        ),
         Value::Symbol(value) => {
             encoded.symbols.push(ffi::cstring_argument(
                 format!("{relation}.{column}"),
                 value,
             )?);
             let symbol = encoded.symbols.last().expect("symbol was just pushed");
-            SouffleRsValue {
-                kind: SouffleRsValueKind::Symbol,
-                as_: SouffleRsValueData {
+            abi_value(
+                SouffleRsValueKind::Symbol,
+                SouffleRsValueData {
                     symbol: SouffleRsString {
                         data: symbol.as_ptr(),
                         len: value.len(),
                     },
                 },
-            }
+            )
         }
-        Value::Nullary => SouffleRsValue {
-            kind: SouffleRsValueKind::Nullary,
-            as_: SouffleRsValueData { unsigned_value: 0 },
-        },
+        Value::Nullary => abi_value(
+            SouffleRsValueKind::Nullary,
+            SouffleRsValueData { unsigned_value: 0 },
+        ),
         Value::Record(fields) => encode_record_input_value(
             relation,
             column,
@@ -366,6 +372,34 @@ fn select_union_variant<'a>(
                     })
                 }
             };
+        } else if let Some(inner_declared_type) = typed_inner_declared_type_name(value) {
+            let Some(variant) = variants.iter().find(|variant| {
+                type_ref_declared_name(variant, definitions) == Some(inner_declared_type)
+            }) else {
+                return Err(SouffleError::TypeMismatch {
+                    relation: relation.to_owned(),
+                    column: column.to_owned(),
+                    expected: union_type.display_name(),
+                    actual: inner_declared_type.to_owned(),
+                });
+            };
+
+            return match variant.accepts_value_with_definitions(value.untyped(), definitions) {
+                TypeCheck::Ok => Ok(variant),
+                TypeCheck::Mismatch { expected, actual } => Err(SouffleError::TypeMismatch {
+                    relation: relation.to_owned(),
+                    column: column.to_owned(),
+                    expected,
+                    actual,
+                }),
+                TypeCheck::AdtVariantMismatch { variant } => {
+                    Err(SouffleError::AdtVariantMismatch {
+                        relation: relation.to_owned(),
+                        column: column.to_owned(),
+                        variant,
+                    })
+                }
+            };
         }
     }
 
@@ -386,6 +420,13 @@ fn select_union_variant<'a>(
                 .unwrap_or_else(|| value.kind().as_str())
                 .to_owned(),
         })
+}
+
+fn typed_inner_declared_type_name(value: &Value) -> Option<&str> {
+    match value {
+        Value::Typed { value, .. } => value.declared_type_name(),
+        _ => None,
+    }
 }
 
 fn type_ref_declared_name<'a>(
@@ -456,12 +497,42 @@ fn push_input_composite(
         len: values.len(),
         variant: variant_string,
     });
-    Ok(SouffleRsValue {
+    Ok(abi_value(
         kind,
-        as_: SouffleRsValueData {
+        SouffleRsValueData {
             composite: SouffleRsCompositeRef { index },
         },
-    })
+    ))
+}
+
+fn abi_value(kind: SouffleRsValueKind, data: SouffleRsValueData) -> SouffleRsValue {
+    SouffleRsValue {
+        kind,
+        declared_type: SouffleRsString::null(),
+        as_: data,
+    }
+}
+
+fn attach_declared_type(
+    relation: &str,
+    column: &str,
+    value: &mut SouffleRsValue,
+    declared_type: &str,
+    encoded: &mut EncodedRow,
+) -> Result<(), SouffleError> {
+    encoded.declared_types.push(ffi::cstring_argument(
+        format!("{relation}.{column}.declared_type"),
+        declared_type,
+    )?);
+    let declared_type = encoded
+        .declared_types
+        .last()
+        .expect("declared type was just pushed");
+    value.declared_type = SouffleRsString {
+        data: declared_type.as_ptr(),
+        len: declared_type.as_bytes().len(),
+    };
+    Ok(())
 }
 
 fn type_mismatch(

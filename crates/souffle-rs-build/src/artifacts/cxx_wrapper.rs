@@ -367,6 +367,14 @@ std::string schema_type_name(const SchemaType& schema) {
     return schema.name == nullptr ? std::string("<unnamed>") : std::string(schema.name);
 }
 
+std::string value_declared_type_name(const SouffleRsValue& value) {
+    return borrowed_string(value.declared_type);
+}
+
+bool schema_declared_type_matches(const SchemaType& schema, const std::string& declared_type) {
+    return !declared_type.empty() && schema.name != nullptr && declared_type == schema.name;
+}
+
 std::string input_value_kind_name(SouffleRsValueKind kind) {
     switch (kind) {
     case SOUFFLE_RS_VALUE_NUMBER:
@@ -668,6 +676,15 @@ int pack_input_union_value(
     if (schema.child_count == 0 || schema.children == nullptr) {
         return set_error(error, SOUFFLE_RS_STATUS_ERROR, "union schema has no variants");
     }
+    const std::string declared_type = value_declared_type_name(value);
+    if (!declared_type.empty() && declared_type != schema_type_name(schema)) {
+        for (std::size_t index = 0; index < schema.child_count; ++index) {
+            if (schema_declared_type_matches(schema.children[index], declared_type)) {
+                return pack_input_schema_value(program, schema.children[index], row, value, output, error);
+            }
+        }
+        return set_error(error, SOUFFLE_RS_STATUS_ERROR, "input declared type is not a union variant: " + declared_type);
+    }
     for (std::size_t index = 0; index < schema.child_count; ++index) {
         if (input_value_matches_schema(schema.children[index], value)) {
             return pack_input_schema_value(program, schema.children[index], row, value, output, error);
@@ -796,6 +813,7 @@ int materialize_record_value(
     }
 
     output_value.kind = SOUFFLE_RS_VALUE_RECORD;
+    output_value.declared_type = null_string();
     output_value.as.composite = push_composite(owner, SOUFFLE_RS_VALUE_RECORD, std::move(fields), null_string());
     return status(SOUFFLE_RS_STATUS_OK);
 }
@@ -836,6 +854,7 @@ int materialize_list_value(
     }
 
     output_value.kind = SOUFFLE_RS_VALUE_LIST;
+    output_value.declared_type = null_string();
     output_value.as.composite = push_composite(owner, SOUFFLE_RS_VALUE_LIST, std::move(elements), null_string());
     return status(SOUFFLE_RS_STATUS_OK);
 }
@@ -877,6 +896,7 @@ int materialize_adt_value(
         }
 
         output_value.kind = SOUFFLE_RS_VALUE_ADT;
+        output_value.declared_type = copy_string(owner, schema_type_name(schema));
         const std::string variant_name = variant.name == nullptr ? std::string() : std::string(variant.name);
         output_value.as.composite =
             push_composite(owner, SOUFFLE_RS_VALUE_ADT, std::vector<SouffleRsValue>{}, copy_string(owner, variant_name));
@@ -925,6 +945,7 @@ int materialize_adt_value(
     }
 
     output_value.kind = SOUFFLE_RS_VALUE_ADT;
+    output_value.declared_type = copy_string(owner, schema_type_name(schema));
     const std::string variant_name = variant.name == nullptr ? std::string() : std::string(variant.name);
     output_value.as.composite =
         push_composite(owner, SOUFFLE_RS_VALUE_ADT, std::move(fields), copy_string(owner, variant_name));
@@ -963,18 +984,22 @@ int materialize_schema_value(
     switch (schema.kind) {
     case SchemaTypeKind::Number:
         output_value.kind = SOUFFLE_RS_VALUE_NUMBER;
+        output_value.declared_type = null_string();
         output_value.as.number = static_cast<int64_t>(souffle::ramBitCast<souffle::RamSigned>(raw));
         return status(SOUFFLE_RS_STATUS_OK);
     case SchemaTypeKind::Unsigned:
         output_value.kind = SOUFFLE_RS_VALUE_UNSIGNED;
+        output_value.declared_type = null_string();
         output_value.as.unsigned_value = static_cast<uint64_t>(souffle::ramBitCast<souffle::RamUnsigned>(raw));
         return status(SOUFFLE_RS_STATUS_OK);
     case SchemaTypeKind::Float:
         output_value.kind = SOUFFLE_RS_VALUE_FLOAT;
+        output_value.declared_type = null_string();
         output_value.as.float_value = static_cast<double>(souffle::ramBitCast<souffle::RamFloat>(raw));
         return status(SOUFFLE_RS_STATUS_OK);
     case SchemaTypeKind::Symbol:
         output_value.kind = SOUFFLE_RS_VALUE_SYMBOL;
+        output_value.declared_type = null_string();
         output_value.as.symbol = copy_string(owner, program->program->getSymbolTable().decode(raw));
         return status(SOUFFLE_RS_STATUS_OK);
     case SchemaTypeKind::Record:
@@ -989,11 +1014,19 @@ int materialize_schema_value(
         if (schema.inner == nullptr) {
             return set_error(error, SOUFFLE_RS_STATUS_ERROR, "schema wrapper type has no runtime type");
         }
-        return materialize_schema_value(program, *schema.inner, raw, owner, output_value, error);
+        {
+            int inner_status = materialize_schema_value(program, *schema.inner, raw, owner, output_value, error);
+            if (inner_status != status(SOUFFLE_RS_STATUS_OK)) {
+                return inner_status;
+            }
+            output_value.declared_type = copy_string(owner, schema_type_name(schema));
+            return status(SOUFFLE_RS_STATUS_OK);
+        }
     case SchemaTypeKind::Union:
         return materialize_union_value(program, schema, raw, owner, output_value, error);
     case SchemaTypeKind::Nullary:
         output_value.kind = SOUFFLE_RS_VALUE_NULLARY;
+        output_value.declared_type = null_string();
         return status(SOUFFLE_RS_STATUS_OK);
     }
     return set_error(error, SOUFFLE_RS_STATUS_ERROR, "unknown schema type kind");

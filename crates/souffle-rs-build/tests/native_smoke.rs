@@ -472,6 +472,8 @@ Output(l) :- Input(_, l).
     let wrapper_source = fs::read_to_string(&wrapper).expect("read generated wrapper");
     assert!(wrapper_source.contains("SchemaTypeKind::Union"));
     assert!(wrapper_source.contains("materialize_union_value"));
+    assert!(wrapper_source.contains("value_declared_type_name"));
+    assert!(wrapper_source.contains("input declared type is not a union variant"));
     assert!(wrapper_source.contains("union schema variants have incompatible runtime tags"));
     assert!(!wrapper_source.contains("output union traversal is not implemented"));
 }
