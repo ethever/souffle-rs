@@ -47,6 +47,23 @@ jobs:
       - name: Format
         run: cargo fmt --all --check
 
+      - name: Default features exclude SQLite
+        run: |
+          cargo check -p souffle-rs
+          if cargo tree -p souffle-rs --edges normal | grep -E 'rusqlite|libsqlite3-sys'; then
+            echo "default souffle-rs features must not enable SQLite dependencies" >&2
+            exit 1
+          fi
+
+      - name: Backend feature checks
+        run: |
+          cargo check -p souffle-rs --lib --no-default-features
+          cargo check -p souffle-rs --lib --no-default-features --features embedded
+          cargo check -p souffle-rs --lib --no-default-features --features process
+          cargo check -p souffle-rs --lib --no-default-features --features file
+          cargo check -p souffle-rs --lib --no-default-features --features sqlite
+          cargo check -p souffle-rs --lib --no-default-features --features memory
+
       - name: Workspace tests
         run: cargo test --workspace --all-features
 

@@ -1,13 +1,21 @@
-use std::{collections::BTreeMap, fmt, num::NonZeroUsize};
+#[cfg(feature = "memory")]
+use std::collections::BTreeMap;
+use std::{fmt, num::NonZeroUsize};
 
 use serde::Serialize;
 
 use crate::{
-    Backend, BuildInfo, CpuBudget, EmbeddedProgram, FileProgram, FileRelationStore, ProcessConfig,
-    ProcessProgram, ProgramConfig, RelationBundle, RelationHandle, RelationSchema, Row, RunOptions,
-    SouffleError, SqliteProgram, SqliteRelationStore, embedded::EmbeddedRelationIterator,
-    schema::TypeCheck,
+    Backend, BuildInfo, CpuBudget, ProgramConfig, RelationBundle, RelationHandle, RelationSchema,
+    Row, RunOptions, SouffleError, schema::TypeCheck,
 };
+#[cfg(feature = "embedded")]
+use crate::{EmbeddedProgram, embedded::EmbeddedRelationIterator};
+#[cfg(feature = "file")]
+use crate::{FileProgram, FileRelationStore};
+#[cfg(feature = "process")]
+use crate::{ProcessConfig, ProcessProgram};
+#[cfg(feature = "sqlite")]
+use crate::{SqliteProgram, SqliteRelationStore};
 
 /// Common dynamic relation operations exposed by every backend.
 ///
@@ -366,8 +374,11 @@ pub trait Program {
 pub struct ProgramBuilder {
     config: ProgramConfig,
     schema: RelationBundle,
+    #[cfg(feature = "process")]
     process_config: Option<ProcessConfig>,
+    #[cfg(feature = "file")]
     file_store: Option<FileRelationStore>,
+    #[cfg(feature = "sqlite")]
     sqlite_store: Option<SqliteRelationStore>,
 }
 
@@ -377,8 +388,11 @@ impl ProgramBuilder {
         Self {
             config: ProgramConfig::new(name),
             schema: RelationBundle::new(),
+            #[cfg(feature = "process")]
             process_config: None,
+            #[cfg(feature = "file")]
             file_store: None,
+            #[cfg(feature = "sqlite")]
             sqlite_store: None,
         }
     }
@@ -456,30 +470,35 @@ impl ProgramBuilder {
     }
 
     /// Attach isolated process backend configuration.
+    #[cfg(feature = "process")]
     pub fn process_config(mut self, process_config: ProcessConfig) -> Self {
         self.process_config = Some(process_config);
         self
     }
 
     /// Attach file backend storage.
+    #[cfg(feature = "file")]
     pub fn file_store(mut self, store: FileRelationStore) -> Self {
         self.file_store = Some(store);
         self
     }
 
     /// Attach SQLite backend storage.
+    #[cfg(feature = "sqlite")]
     pub fn sqlite_store(mut self, store: SqliteRelationStore) -> Self {
         self.sqlite_store = Some(store);
         self
     }
 
     /// Build an in-memory relation facade.
+    #[cfg(feature = "memory")]
     pub fn build_memory(self) -> InMemoryProgram {
         self.try_build_memory()
             .expect("invalid schema passed to ProgramBuilder::build_memory")
     }
 
     /// Build an in-memory relation facade after schema validation.
+    #[cfg(feature = "memory")]
     pub fn try_build_memory(self) -> Result<InMemoryProgram, SouffleError> {
         self.schema.validate()?;
         Ok(InMemoryProgram::new(
@@ -489,11 +508,13 @@ impl ProgramBuilder {
     }
 
     /// Build an embedded generated-program facade.
+    #[cfg(feature = "embedded")]
     pub fn build_embedded(self) -> Result<EmbeddedProgram, SouffleError> {
         EmbeddedProgram::from_config(self.config.with_backend(Backend::Embedded), self.schema)
     }
 
     /// Build an isolated process facade.
+    #[cfg(feature = "process")]
     pub fn build_process(self) -> Result<ProcessProgram, SouffleError> {
         let Some(process_config) = self.process_config else {
             return Err(SouffleError::ProcessConfiguration {
@@ -509,6 +530,7 @@ impl ProgramBuilder {
     }
 
     /// Build a file-backed relation facade.
+    #[cfg(feature = "file")]
     pub fn build_file(self) -> Result<FileProgram, SouffleError> {
         let Some(store) = self.file_store else {
             return Err(SouffleError::BackendConfiguration {
@@ -521,6 +543,7 @@ impl ProgramBuilder {
     }
 
     /// Build a SQLite-backed relation facade.
+    #[cfg(feature = "sqlite")]
     pub fn build_sqlite(self) -> Result<SqliteProgram, SouffleError> {
         let Some(store) = self.sqlite_store else {
             return Err(SouffleError::BackendConfiguration {
@@ -546,6 +569,7 @@ impl ProgramBuilder {
 /// unit tests, schema validation, file/SQLite export tooling, and backend
 /// parity checks.
 #[derive(Debug, Clone)]
+#[cfg(feature = "memory")]
 pub struct InMemoryProgram {
     config: ProgramConfig,
     schema: RelationBundle,
@@ -553,6 +577,7 @@ pub struct InMemoryProgram {
     last_run_options: Option<RunOptions>,
 }
 
+#[cfg(feature = "memory")]
 impl InMemoryProgram {
     /// Create an in-memory program from explicit config and schema metadata.
     pub fn new(config: ProgramConfig, schema: RelationBundle) -> Self {
@@ -603,6 +628,7 @@ impl InMemoryProgram {
     }
 }
 
+#[cfg(feature = "memory")]
 impl Program for InMemoryProgram {
     fn name(&self) -> &str {
         self.config.name()
@@ -800,6 +826,7 @@ pub struct RelationIterator<'program> {
 }
 
 impl<'program> RelationIterator<'program> {
+    #[cfg(any(feature = "memory", feature = "file", feature = "sqlite"))]
     pub(crate) fn new(schema: RelationSchema, rows: Vec<Row>) -> Self {
         Self {
             schema,
@@ -807,6 +834,7 @@ impl<'program> RelationIterator<'program> {
         }
     }
 
+    #[cfg(feature = "embedded")]
     pub(crate) fn from_embedded(
         schema: RelationSchema,
         iterator: EmbeddedRelationIterator<'program>,
@@ -817,6 +845,7 @@ impl<'program> RelationIterator<'program> {
         }
     }
 
+    #[cfg(any(feature = "process", feature = "file", feature = "sqlite"))]
     pub(crate) fn from_source<S>(schema: RelationSchema, source: S) -> Self
     where
         S: RelationIteratorSource + 'program,
@@ -913,11 +942,13 @@ pub(crate) trait RelationIteratorSource: fmt::Debug {
 }
 
 #[derive(Debug)]
+#[cfg(any(feature = "memory", feature = "file", feature = "sqlite"))]
 struct BufferedRelationRows {
     rows: Vec<Row>,
     offset: usize,
 }
 
+#[cfg(any(feature = "memory", feature = "file", feature = "sqlite"))]
 impl RelationIteratorSource for BufferedRelationRows {
     fn next_row(&mut self, schema: &RelationSchema) -> Result<Option<Row>, SouffleError> {
         let Some(row) = self.rows.get(self.offset).cloned() else {

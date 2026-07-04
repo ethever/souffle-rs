@@ -1,8 +1,9 @@
 //! Safe Rust API for Souffle Datalog programs.
 //!
-//! The crate-level API is intentionally backend-neutral. Embedded C++,
-//! process/file, SQLite, and pure in-memory relation exchange all target the
-//! same value, schema, and error model.
+//! The crate-level API is intentionally backend-neutral. Enabled backend
+//! features all target the same value, schema, and error model. The default
+//! feature set enables embedded C++, process, file, and pure in-memory relation
+//! exchange; enable the `sqlite` feature explicitly for SQLite-backed storage.
 //!
 //! # Example
 //!
@@ -61,32 +62,45 @@
 #![deny(missing_docs)]
 
 mod backend;
+#[cfg(feature = "embedded")]
 mod embedded;
 mod error;
+#[cfg(feature = "file")]
 mod export;
+#[cfg(feature = "embedded")]
 mod ffi;
 mod info;
 mod parity;
 mod performance;
+#[cfg(feature = "process")]
 mod process;
 mod program;
 mod schema;
+#[cfg(feature = "sqlite")]
 mod sqlite;
 mod value;
 
-pub use backend::{Backend, CpuBudget, ProcessConfig, ProgramConfig, RunOptions};
+#[cfg(feature = "process")]
+pub use backend::ProcessConfig;
+pub use backend::{Backend, CpuBudget, ProgramConfig, RunOptions};
+#[cfg(feature = "embedded")]
 pub use embedded::EmbeddedProgram;
 pub use error::{AbiError, BuildError, LinkError, SouffleError};
+#[cfg(feature = "file")]
 pub use export::{FileExportManifest, FileProgram, FileRelationArtifact, FileRelationStore};
 pub use info::BuildInfo;
 pub use parity::verify_backend_parity;
 pub use performance::{PerformanceMetrics, PerformanceRecorder};
+#[cfg(feature = "process")]
 pub use process::ProcessProgram;
-pub use program::{InMemoryProgram, Program, ProgramBuilder, RelationIterator, RelationOutput};
+#[cfg(feature = "memory")]
+pub use program::InMemoryProgram;
+pub use program::{Program, ProgramBuilder, RelationIterator, RelationOutput};
 pub use schema::{
     AttributeSchema, RelationBundle, RelationHandle, RelationId, RelationKind, RelationSchema,
     TypeRef,
 };
+#[cfg(feature = "sqlite")]
 pub use sqlite::{SqliteProgram, SqliteRelationArtifact, SqliteRelationStore};
 pub use value::{Row, Value, ValueKind};
 

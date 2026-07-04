@@ -4,12 +4,14 @@ use crate::{
     AttributeSchema, Backend, CpuBudget, FileProgram, FileRelationStore, InMemoryProgram,
     PerformanceRecorder, ProcessConfig, ProcessProgram, Program, ProgramConfig, RelationBundle,
     RelationHandle, RelationId, RelationIterator, RelationKind, RelationOutput, RelationSchema,
-    Row, RunOptions, SouffleError, SqliteProgram, SqliteRelationStore, TypeRef, Value, ValueKind,
+    Row, RunOptions, SouffleError, TypeRef, Value, ValueKind,
     embedded::program_name_cstring,
     embedded::{decode_scalar_value, encode_input_row},
     ffi::{check_abi_version, check_status},
     verify_backend_parity,
 };
+#[cfg(feature = "sqlite")]
+use crate::{SqliteProgram, SqliteRelationStore};
 use souffle_rs_sys::{
     SouffleRsError, SouffleRsStatus, SouffleRsString, SouffleRsValue, SouffleRsValueData,
     SouffleRsValueKind,
@@ -248,6 +250,7 @@ fn performance_recorder_counts_file_backend_artifacts() {
 }
 
 #[test]
+#[cfg(feature = "sqlite")]
 fn performance_recorder_counts_sqlite_backend_artifacts() {
     let tempdir = tempfile::tempdir().unwrap();
     let store = SqliteRelationStore::new(tempdir.path().join("relations.duckdb"));
@@ -1876,6 +1879,7 @@ fn file_program_requires_store_configuration() {
 }
 
 #[test]
+#[cfg(feature = "sqlite")]
 fn sqlite_relation_store_exports_schema_and_rows() {
     let mut program = InMemoryProgram::builder("analysis")
         .schema(sample_schema())
@@ -1917,6 +1921,7 @@ fn sqlite_relation_store_exports_schema_and_rows() {
 }
 
 #[test]
+#[cfg(feature = "sqlite")]
 fn sqlite_relation_store_exports_outputs_from_iterator_without_read_relation() {
     let output_rows = vec![
         Row::new(vec![
@@ -1943,6 +1948,7 @@ fn sqlite_relation_store_exports_outputs_from_iterator_without_read_relation() {
 }
 
 #[test]
+#[cfg(feature = "sqlite")]
 fn sqlite_program_persists_dynamic_rows_and_iterates_outputs() {
     let tempdir = tempfile::tempdir().unwrap();
     let store = SqliteRelationStore::new(tempdir.path().join("runtime/relations.sqlite"));
@@ -2008,6 +2014,7 @@ fn sqlite_program_persists_dynamic_rows_and_iterates_outputs() {
 }
 
 #[test]
+#[cfg(feature = "sqlite")]
 fn sqlite_program_iter_relation_decodes_rows_lazily() {
     let tempdir = tempfile::tempdir().unwrap();
     let store = SqliteRelationStore::new(tempdir.path().join("runtime/relations.sqlite"));
@@ -2049,6 +2056,7 @@ fn sqlite_program_iter_relation_decodes_rows_lazily() {
 }
 
 #[test]
+#[cfg(feature = "sqlite")]
 fn sqlite_program_requires_store_configuration() {
     let error = SqliteProgram::builder("analysis")
         .schema(sample_schema())

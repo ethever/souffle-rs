@@ -1,5 +1,6 @@
+use std::num::NonZeroUsize;
+#[cfg(feature = "process")]
 use std::{
-    num::NonZeroUsize,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -320,12 +321,14 @@ impl ProgramConfig {
 /// assert_eq!(config.timeout(), Some(Duration::from_secs(30)));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(feature = "process")]
 pub struct ProcessConfig {
     executable: PathBuf,
     work_dir: PathBuf,
     timeout: Option<Duration>,
 }
 
+#[cfg(feature = "process")]
 impl ProcessConfig {
     /// Create process backend configuration from a compiled Souffle executable
     /// and a backend-owned working directory.

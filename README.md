@@ -142,6 +142,11 @@ configures another Souffle I/O mode. Delimiter characters in input symbols are
 rejected before writing `.facts`; output decoding preserves delimiter characters
 where the default record/list/ADT text format remains unambiguous.
 
+The runtime crate exposes five backend features: `embedded`, `process`, `file`,
+`memory`, and `sqlite`. Defaults enable `embedded`, `process`, `file`, and
+`memory`; `sqlite` is opt-in so applications do not compile SQLite dependencies
+unless they ask for SQLite-backed relation storage.
+
 ```rust
 use souffle_rs::{
     AttributeSchema, Backend, InMemoryProgram, Program, RelationBundle,
