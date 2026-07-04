@@ -12,8 +12,8 @@ use std::{
 use std::os::unix::fs::PermissionsExt;
 
 use crate::{
-    Build, BuildError, CargoDirective, CppStandard, ExternalLibrary, ExternalLibraryKind,
-    FunctorLibrary, GeneratedMode, LinkMode, NativeLinkMode, OpenMpConfig,
+    Build, BuildError, BuildProfile, CargoDirective, CppStandard, ExternalLibrary,
+    ExternalLibraryKind, FunctorLibrary, GeneratedMode, LinkMode, NativeLinkMode, OpenMpConfig,
     config::{cargo_manifest_path, native_compiler_env_vars},
 };
 use souffle_rs::{AttributeSchema, RelationBundle, RelationId, RelationSchema, TypeRef};
@@ -226,6 +226,44 @@ fn single_file_mode_plans_stable_cpp_artifact() {
 
     assert!(args.contains(&OsString::from("-g")));
     assert!(args.contains(&OsString::from("target/souffle-rs/generated/analysis.cpp")));
+}
+
+#[test]
+fn embedded_typed_api_profile_sets_standard_artifacts() {
+    let metadata = Build::new()
+        .program("analysis", "logic/main.dl")
+        .profile(BuildProfile::EmbeddedTypedApi)
+        .metadata()
+        .unwrap();
+
+    assert_eq!(
+        metadata.c_header_artifact,
+        Some(PathBuf::from("target/souffle-rs/include/souffle_rs.h"))
+    );
+    assert_eq!(
+        metadata.cxx_wrapper_artifact,
+        Some(PathBuf::from(
+            "target/souffle-rs/native/souffle_rs_wrapper.cpp"
+        ))
+    );
+    assert_eq!(
+        metadata.typed_api_module_artifact,
+        Some(PathBuf::from("target/souffle-rs/rust/mod.rs"))
+    );
+    assert_eq!(
+        metadata.programs[0].schema_artifact,
+        Some(PathBuf::from("target/souffle-rs/schema/analysis.json"))
+    );
+    assert_eq!(
+        metadata.programs[0].typed_api_artifact,
+        Some(PathBuf::from("target/souffle-rs/rust/analysis.rs"))
+    );
+    assert!(metadata.native.compile_enabled);
+    assert_eq!(metadata.native.cpp_standard, CppStandard::Cxx17);
+    assert_eq!(
+        metadata.native.static_library.as_deref(),
+        Some("souffle_rs_generated")
+    );
 }
 
 #[test]

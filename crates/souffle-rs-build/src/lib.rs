@@ -15,7 +15,7 @@
 //!     AttributeSchema, RelationBundle, RelationId, RelationSchema, TypeRef,
 //! };
 //! use souffle_rs_build::{
-//!     Build, CppStandard, ExternalLibrary, GeneratedMode, LinkMode, NativeLinkMode,
+//!     Build, BuildProfile, ExternalLibrary, GeneratedMode, LinkMode, NativeLinkMode,
 //!     OpenMpConfig,
 //! };
 //!
@@ -51,18 +51,13 @@
 //!     .define("PROJECT_DIR", "/workspace")
 //!     .include_dir("logic/include")
 //!     .library_dir("souffle-addon")
-//!     .cpp_standard(CppStandard::Cxx17)
 //!     .target_triple("aarch64-apple-darwin")
 //!     .openmp(OpenMpConfig::disabled())
 //!     .external_library(ExternalLibrary::z3("z3").link_mode(NativeLinkMode::Dynamic))
 //!     .link_mode(LinkMode::Dynamic)
 //!     .rpath("/opt/souffle/lib")
 //!     .install_name("@rpath/libanalysis.dylib")
-//!     .emit_c_header(true)
-//!     .emit_cxx_wrapper(true)
-//!     .emit_schema(true)
-//!     .emit_typed_api(true)
-//!     .emit_typed_api_module(true)
+//!     .profile(BuildProfile::EmbeddedTypedApi)
 //!     .schema_bundle("analysis", schema)
 //!     .compile()?;
 //!
@@ -82,8 +77,8 @@ mod plan;
 mod schema_extract;
 
 pub use config::{
-    Build, CppStandard, ExternalLibrary, ExternalLibraryKind, FunctorLibrary, GeneratedMode,
-    LinkMode, NativeLinkMode, OpenMpConfig, cargo_manifest_path,
+    Build, BuildProfile, CppStandard, ExternalLibrary, ExternalLibraryKind, FunctorLibrary,
+    GeneratedMode, LinkMode, NativeLinkMode, OpenMpConfig, cargo_manifest_path,
 };
 pub use error::{BuildError, CommandFailure, NativeCompileFailure};
 pub use metadata::{

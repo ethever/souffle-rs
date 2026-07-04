@@ -141,6 +141,38 @@ impl CppStandard {
     }
 }
 
+/// Preset build configuration for common integration modes.
+///
+/// Profiles are deliberately narrow: they turn on a coherent set of artifact
+/// and native-compilation options, while leaving program names, namespaces,
+/// Souffle paths, generated output mode, schema source, and link settings under
+/// the caller's explicit control.
+///
+/// # Example
+///
+/// ```
+/// use souffle_rs_build::{Build, BuildProfile};
+///
+/// let metadata = Build::new()
+///     .program("analysis", "logic/main.dl")
+///     .profile(BuildProfile::EmbeddedTypedApi)
+///     .metadata()
+///     .unwrap();
+///
+/// assert!(metadata.c_header_artifact.is_some());
+/// assert!(metadata.cxx_wrapper_artifact.is_some());
+/// assert!(metadata.typed_api_module_artifact.is_some());
+/// assert!(metadata.programs[0].schema_artifact.is_some());
+/// assert!(metadata.programs[0].typed_api_artifact.is_some());
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BuildProfile {
+    /// Generate C ABI artifacts, schema JSON, typed Rust APIs, a typed API
+    /// module index, and compile the generated C++ into a native library.
+    EmbeddedTypedApi,
+}
+
 /// Role of a configured external native library.
 ///
 /// The role is recorded in [`crate::BuildMetadata`] so downstream tooling can
@@ -544,7 +576,12 @@ impl Build {
         self
     }
 
-    /// Record the Souffle version used by build metadata.
+    /// Record the Souffle version in build metadata.
+    ///
+    /// This is a reproducibility annotation, not a runtime check against the
+    /// configured Souffle binary or include directory. External Souffle
+    /// toolchain versions should be pinned by the environment, package manager,
+    /// container image, or an explicit build-script check.
     pub fn souffle_version(mut self, version: impl Into<String>) -> Self {
         self.souffle_version = Some(version.into());
         self
@@ -652,6 +689,25 @@ impl Build {
     /// sources.
     pub fn compile_native(mut self, compile: bool) -> Self {
         self.compile_native = compile;
+        self
+    }
+
+    /// Apply a preset build configuration.
+    ///
+    /// Explicit setters called after this method can still override individual
+    /// options where a profile is too broad for a particular integration.
+    pub fn profile(mut self, profile: BuildProfile) -> Self {
+        match profile {
+            BuildProfile::EmbeddedTypedApi => {
+                self.cpp_standard = CppStandard::Cxx17;
+                self.emit_c_header = true;
+                self.emit_cxx_wrapper = true;
+                self.emit_schema = true;
+                self.emit_typed_api = true;
+                self.emit_typed_api_module = true;
+                self.compile_native = true;
+            }
+        }
         self
     }
 

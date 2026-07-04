@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use souffle_rs_build::{Build, CppStandard, GeneratedMode, cargo_manifest_path};
+use souffle_rs_build::{Build, BuildProfile, GeneratedMode, cargo_manifest_path};
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-env-changed=SOUFFLE_RS_SOUFFLE_BIN");
@@ -30,13 +30,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .souffle_include(&souffle_include)
         .generated_namespace("reachability_auto_schema_generated")
         .generated_mode(GeneratedMode::SingleFile)
-        .cpp_standard(CppStandard::Cxx17)
-        .emit_c_header(true)
-        .emit_cxx_wrapper(true)
-        .emit_schema(true)
-        .emit_typed_api(true)
-        .emit_typed_api_module(true)
-        .compile_native(true)
+        .profile(BuildProfile::EmbeddedTypedApi)
         .compile()?;
     Ok(())
 }

@@ -78,7 +78,7 @@ use souffle_rs::{
     AttributeSchema, RelationBundle, RelationId, RelationSchema, TypeRef,
 };
 use souffle_rs_build::{
-    Build, CppStandard, FunctorLibrary, GeneratedMode, LinkMode, NativeLinkMode,
+    Build, BuildProfile, FunctorLibrary, GeneratedMode, LinkMode, NativeLinkMode,
     OpenMpConfig,
 };
 
@@ -112,13 +112,9 @@ Build::new()
             .link_library("z3")
             .link_mode(NativeLinkMode::Dynamic),
     )
-    .cpp_standard(CppStandard::Cxx17)
     .openmp(OpenMpConfig::enabled("gomp"))
     .link_mode(LinkMode::StaticGeneratedAndConfiguredExternal)
-    .emit_c_header(true)
-    .emit_cxx_wrapper(true)
-    .emit_schema(true)
-    .emit_typed_api(true)
+    .profile(BuildProfile::EmbeddedTypedApi)
     .schema_bundle("analysis", schema)
     .compile()?;
 # Ok(())
