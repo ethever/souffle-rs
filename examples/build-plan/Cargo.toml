@@ -1,0 +1,11 @@
+[package]
+name = "souffle-rs-example-build-plan"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+souffle-rs = { path = "../../crates/souffle-rs" }
+souffle-rs-build = { path = "../../crates/souffle-rs-build" }

@@ -6,4 +6,25 @@ rust-version.workspace = true
 repository.workspace = true
 description = "build.rs helper for generating and compiling embedded Souffle programs"
 
+[features]
+default = ["souffle-2-4-1"]
+souffle-2-4-1 = []
+
 [dependencies]
+cc = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+souffle-rs = { path = "../souffle-rs", default-features = false }
+souffle-rs-sys = { path = "../souffle-rs-sys" }
+strum.workspace = true
+thiserror = "2"
+
+[dev-dependencies]
+souffle-rs = { path = "../souffle-rs", default-features = false, features = [
+    "embedded",
+    "process",
+    "file",
+    "sqlite",
+    "memory",
+] }
+tempfile = "3"

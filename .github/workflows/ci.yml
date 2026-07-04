@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  SOUFFLE_RS_SUPPORTED_SOUFFLE_VERSION: "2.4.1"
+
+jobs:
+  rust:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-gcc
+            os: ubuntu-latest
+            cc: gcc
+            cxx: g++
+          - name: linux-clang
+            os: ubuntu-latest
+            cc: clang
+            cxx: clang++
+          - name: macos-clang
+            os: macos-latest
+            cc: clang
+            cxx: clang++
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Configure compiler
+        run: |
+          echo "CC=${{ matrix.cc }}" >> "$GITHUB_ENV"
+          echo "CXX=${{ matrix.cxx }}" >> "$GITHUB_ENV"
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Default features exclude SQLite
+        run: |
+          cargo check -p souffle-rs
+          if cargo tree -p souffle-rs --edges normal | grep -E 'rusqlite|libsqlite3-sys'; then
+            echo "default souffle-rs features must not enable SQLite dependencies" >&2
+            exit 1
+          fi
+
+      - name: Backend feature checks
+        run: |
+          cargo check -p souffle-rs --lib --no-default-features
+          cargo check -p souffle-rs --lib --no-default-features --features embedded
+          cargo check -p souffle-rs --lib --no-default-features --features process
+          cargo check -p souffle-rs --lib --no-default-features --features file
+          cargo check -p souffle-rs --lib --no-default-features --features sqlite
+          cargo check -p souffle-rs --lib --no-default-features --features memory
+
+      - name: Workspace tests
+        run: cargo test --workspace --all-features
+
+      - name: Rustdoc with examples
+        run: RUSTDOCFLAGS="-D warnings -D missing_docs" cargo doc --workspace --all-features --no-deps
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+  native-souffle:
+    name: native-souffle-release-smoke
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ca-certificates clang wget
+          wget "https://github.com/souffle-lang/souffle/releases/download/${SOUFFLE_RS_SUPPORTED_SOUFFLE_VERSION}/x86_64-ubuntu-2004-souffle-${SOUFFLE_RS_SUPPORTED_SOUFFLE_VERSION}-Linux.deb" \
+            -O "/tmp/souffle-${SOUFFLE_RS_SUPPORTED_SOUFFLE_VERSION}.deb"
+          sudo apt-get install -y "/tmp/souffle-${SOUFFLE_RS_SUPPORTED_SOUFFLE_VERSION}.deb"
+          souffle --version
+          test "$(souffle --version | sed -n 's/^Version: //p')" = "${SOUFFLE_RS_SUPPORTED_SOUFFLE_VERSION}"
+
+      - name: Run release ignored native smoke tests
+        env:
+          CC: clang
+          CXX: clang++
+          HOST: x86_64-unknown-linux-gnu
+          TARGET: x86_64-unknown-linux-gnu
+          OUT_DIR: ${{ github.workspace }}/target/native-smoke-out
+          OPT_LEVEL: 3
+          PROFILE: release
+        run: |
+          cargo test --release -p souffle-rs --test process_smoke -- --ignored
+          cargo test --release -p souffle-rs-build --test native_smoke -- --ignored --nocapture
+
+      - name: Run embedded examples
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          cargo run --manifest-path examples/embedded-build/Cargo.toml
+          cargo run --manifest-path examples/embedded-auto-schema/Cargo.toml
+
+  ffi-leak-check:
+    name: ffi-buffer-leak-check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install leak checker
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind
+
+      - name: Build FFI buffer tests
+        run: cargo test --release -p souffle-rs --lib --no-run
+
+      - name: Run FFI arena test under valgrind
+        run: |
+          test_bin="$(find target/release/deps -maxdepth 1 -type f -name 'souffle_rs-*' -perm -111 | head -n 1)"
+          valgrind --leak-check=full --show-leak-kinds=definite \
+            --errors-for-leak-kinds=definite --error-exitcode=1 "$test_bin" \
+            tests::embedded_composite_input_rows_encode_borrowed_c_abi_arena --exact

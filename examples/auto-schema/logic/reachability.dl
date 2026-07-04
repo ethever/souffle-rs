@@ -1,0 +1,14 @@
+.type EdgePayload = [source:symbol, target:symbol]
+.type Marker = Seed {} | Derived {}
+
+.decl Edge(payload:EdgePayload)
+.input Edge
+
+.decl Seed(node:symbol)
+.input Seed
+
+.decl Reachable(node:symbol, marker:Marker)
+.output Reachable
+
+Reachable(node, $Seed()) :- Seed(node).
+Reachable(target, $Derived()) :- Reachable(source, _), Edge([source, target]).
