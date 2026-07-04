@@ -4,6 +4,9 @@ Each subdirectory is a standalone package with its own `Cargo.toml` and
 `src/main.rs`. The lightweight examples are workspace members so they build in
 normal CI. The embedded examples are intentionally opt-in because they need
 Souffle headers and a C++ compiler during Cargo's build-script phase.
+The build-helper examples currently require exactly Souffle `2.4.1`, selected
+by the default `souffle-rs-build` feature `souffle-2-4-1`; `Build::compile()`
+checks the configured `souffle` binary before generating artifacts.
 
 The main examples cover the schema/build integration matrix:
 
@@ -30,7 +33,8 @@ paths:
 cargo run -p souffle-rs-example-auto-schema
 ```
 
-The auto-schema example requires Souffle on `PATH` or `SOUFFLE_RS_SOUFFLE_BIN`.
+The auto-schema example requires supported Souffle on `PATH` or
+`SOUFFLE_RS_SOUFFLE_BIN`.
 
 Print the build-helper plan for a typed Souffle integration. This example reads
 `examples/build-plan/logic/reachability.dl`, builds a `Build` configuration, and
@@ -83,6 +87,6 @@ Souffle, emits schema JSON and typed Rust API, compiles the generated C++ into a
 native library, and `src/main.rs` uses the generated `schema_bundle()` before
 using the generated typed API.
 
-Set `SOUFFLE_RS_SOUFFLE_BIN` and `SOUFFLE_RS_SOUFFLE_INCLUDE` when Souffle is
-installed outside `PATH` or its headers are not under the same installation
-prefix.
+Set `SOUFFLE_RS_SOUFFLE_BIN` and `SOUFFLE_RS_SOUFFLE_INCLUDE` when supported
+Souffle is installed outside `PATH` or its headers are not under the same
+installation prefix.

@@ -14,6 +14,9 @@ This is an opt-in standalone package that demonstrates the full embedded flow:
 
 It is not a default workspace member because it requires Souffle headers and a
 C++ compiler during Cargo's build-script phase.
+The build helper currently supports exactly Souffle `2.4.1`, selected by the
+default `souffle-2-4-1` Cargo feature, and checks the configured binary before
+generation.
 
 Run it explicitly:
 
@@ -21,7 +24,7 @@ Run it explicitly:
 cargo run --manifest-path examples/embedded-build/Cargo.toml
 ```
 
-If Souffle is not on `PATH`, set:
+If supported Souffle is not on `PATH`, set:
 
 ```bash
 SOUFFLE_RS_SOUFFLE_BIN=/path/to/souffle \

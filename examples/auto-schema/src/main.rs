@@ -1,8 +1,9 @@
 //! Standalone executable example for build-time schema extraction.
 //!
 //! This package intentionally does not pass a hand-written `RelationBundle`.
-//! Run it with `cargo run -p souffle-rs-example-auto-schema` when Souffle is
-//! installed or `SOUFFLE_RS_SOUFFLE_BIN` points to a Souffle binary.
+//! Run it with `cargo run -p souffle-rs-example-auto-schema` when supported
+//! Souffle is installed or `SOUFFLE_RS_SOUFFLE_BIN` points to a supported
+//! Souffle binary.
 
 use std::{
     env, fs, io,
@@ -106,7 +107,9 @@ fn souffle_available(souffle_bin: &Path) -> Result<bool, Box<dyn std::error::Err
         ))
         .into()),
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            eprintln!("skipping example: install Souffle or set SOUFFLE_RS_SOUFFLE_BIN to run it");
+            eprintln!(
+                "skipping example: install supported Souffle or set SOUFFLE_RS_SOUFFLE_BIN to run it"
+            );
             Ok(false)
         }
         Err(error) => Err(error.into()),

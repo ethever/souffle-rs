@@ -5,6 +5,11 @@
 //! execution is intentionally driven from this typed configuration instead of
 //! ad-hoc `build.rs` strings.
 //!
+//! This crate currently supports exactly Souffle [`SUPPORTED_SOUFFLE_VERSION`],
+//! selected by the default `souffle-2-4-1` Cargo feature. [`Build::compile`]
+//! checks the configured `souffle` binary before schema extraction or code
+//! generation.
+//!
 //! # Example
 //!
 //! Configure a `build.rs` path that generates Souffle C++, emits the C ABI
@@ -78,7 +83,8 @@ mod schema_extract;
 
 pub use config::{
     Build, BuildProfile, CppStandard, ExternalLibrary, ExternalLibraryKind, FunctorLibrary,
-    GeneratedMode, LinkMode, NativeLinkMode, OpenMpConfig, cargo_manifest_path,
+    GeneratedMode, LinkMode, NativeLinkMode, OpenMpConfig, SUPPORTED_SOUFFLE_VERSION,
+    cargo_manifest_path,
 };
 pub use error::{BuildError, CommandFailure, NativeCompileFailure};
 pub use metadata::{

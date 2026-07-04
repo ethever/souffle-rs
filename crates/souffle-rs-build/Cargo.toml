@@ -6,6 +6,10 @@ rust-version.workspace = true
 repository.workspace = true
 description = "build.rs helper for generating and compiling embedded Souffle programs"
 
+[features]
+default = ["souffle-2-4-1"]
+souffle-2-4-1 = []
+
 [dependencies]
 cc = "1"
 serde = { version = "1", features = ["derive"] }

@@ -14,7 +14,7 @@ use std::os::unix::fs::PermissionsExt;
 use crate::{
     Build, BuildError, BuildProfile, CargoDirective, CppStandard, ExternalLibrary,
     ExternalLibraryKind, FunctorLibrary, GeneratedMode, LinkMode, NativeLinkMode, OpenMpConfig,
-    config::{cargo_manifest_path, native_compiler_env_vars},
+    config::{SUPPORTED_SOUFFLE_VERSION, cargo_manifest_path, native_compiler_env_vars},
 };
 use souffle_rs::{AttributeSchema, RelationBundle, RelationId, RelationSchema, TypeRef};
 
@@ -1045,6 +1045,10 @@ fn compile_runs_souffle_generation_and_writes_metadata() {
     let generated_marker = out_dir.join("generated/analysis/fake-generated.cpp");
     assert!(generated_marker.exists());
     assert_eq!(
+        metadata.souffle_version.as_deref(),
+        Some(SUPPORTED_SOUFFLE_VERSION)
+    );
+    assert_eq!(
         metadata.programs[0].generated_sources,
         vec![generated_marker.clone()]
     );
@@ -1068,6 +1072,9 @@ fn compile_runs_souffle_generation_and_writes_metadata() {
 
     let metadata_json = fs::read_to_string(&metadata.metadata_path).unwrap();
     assert!(metadata_json.contains("generated_files"));
+    assert!(metadata_json.contains(&format!(
+        "\"souffle_version\": \"{SUPPORTED_SOUFFLE_VERSION}\""
+    )));
     assert!(metadata_json.contains("\"program\": \"analysis\""));
     assert!(metadata_json.contains("generated/analysis"));
     assert!(metadata_json.contains("include/souffle_rs.h"));
@@ -1218,6 +1225,33 @@ fn compile_runs_souffle_generation_and_writes_metadata() {
     assert!(typed_api.contains("pub fn iter_typed<'program, P>("));
     assert!(typed_api.contains("Result<OutputTypedRows<'program>, SouffleError>"));
     assert!(typed_api.contains("pub fn read<P>(program: &P) -> Result<Vec<OutputRow>"));
+}
+
+#[test]
+fn compile_rejects_unsupported_souffle_version_before_generation() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let fake_souffle = fake_souffle_version_bin(tempdir.path(), "2.4.0");
+    let out_dir = tempdir.path().join("out");
+    let entrypoint = tempdir.path().join("logic/main.dl");
+    fs::create_dir_all(entrypoint.parent().unwrap()).unwrap();
+    fs::write(&entrypoint, ".decl Input(x:number)\n").unwrap();
+
+    let error = Build::new()
+        .program("analysis", &entrypoint)
+        .souffle_bin(&fake_souffle)
+        .out_dir(&out_dir)
+        .compile()
+        .unwrap_err();
+
+    assert_eq!(
+        error,
+        BuildError::UnsupportedSouffleVersion {
+            souffle_bin: fake_souffle.display().to_string(),
+            expected: SUPPORTED_SOUFFLE_VERSION.to_owned(),
+            actual: "2.4.0".to_owned(),
+        }
+    );
+    assert!(!out_dir.exists());
 }
 
 #[test]
@@ -1628,6 +1662,10 @@ fn fake_souffle_bin(root: &Path, exit_code: i32) -> PathBuf {
         format!(
             r#"#!/bin/sh
 set -eu
+if [ "${{1:-}}" = "--version" ]; then
+  printf '%s\n' "Version: {SUPPORTED_SOUFFLE_VERSION}"
+  exit 0
+fi
 if [ "{exit_code}" -ne 0 ]; then
   echo "fake souffle failed" >&2
   exit "{exit_code}"
@@ -1666,12 +1704,60 @@ done
     script
 }
 
+fn fake_souffle_version_bin(root: &Path, version: &str) -> PathBuf {
+    let script = root.join("fake-souffle-version");
+    let mut file = fs::File::create(&script).unwrap();
+    file.write_all(
+        format!(
+            r#"#!/bin/sh
+set -eu
+if [ "${{1:-}}" = "--version" ]; then
+  printf '%s\n' "Version: {version}"
+  exit 0
+fi
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -G)
+      shift
+      mkdir -p "$1"
+      printf '%s\n' "// generated directory" > "$1/fake-generated.cpp"
+      ;;
+    -g)
+      shift
+      mkdir -p "$(dirname "$1")"
+      printf '%s\n' "// generated file" > "$1"
+      ;;
+  esac
+  shift || true
+done
+"#
+        )
+        .as_bytes(),
+    )
+    .unwrap();
+    file.flush().unwrap();
+    file.sync_all().unwrap();
+    drop(file);
+
+    #[cfg(unix)]
+    {
+        let mut permissions = fs::metadata(&script).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script, permissions).unwrap();
+    }
+
+    script
+}
+
 fn fake_souffle_with_schema_bin(root: &Path) -> PathBuf {
     let script = root.join("fake-souffle-with-schema");
     let mut file = fs::File::create(&script).unwrap();
-    file.write_all(
-        r#"#!/bin/sh
+    let script_source = r#"#!/bin/sh
 set -eu
+if [ "${1:-}" = "--version" ]; then
+  printf '%s\n' "Version: __SOUFFLE_VERSION__"
+  exit 0
+fi
 if [ "${1:-}" = "--show=transformed-ast" ]; then
   args=" $* "
   case "$args" in
@@ -1720,9 +1806,8 @@ while [ "$#" -gt 0 ]; do
   shift || true
 done
 "#
-        .as_bytes(),
-    )
-    .unwrap();
+    .replace("__SOUFFLE_VERSION__", SUPPORTED_SOUFFLE_VERSION);
+    file.write_all(script_source.as_bytes()).unwrap();
     file.flush().unwrap();
     file.sync_all().unwrap();
     drop(file);
@@ -1740,9 +1825,12 @@ done
 fn fake_souffle_without_sources_bin(root: &Path) -> PathBuf {
     let script = root.join("fake-souffle-no-sources");
     let mut file = fs::File::create(&script).unwrap();
-    file.write_all(
-        r#"#!/bin/sh
+    let script_source = r#"#!/bin/sh
 set -eu
+if [ "${1:-}" = "--version" ]; then
+  printf '%s\n' "Version: __SOUFFLE_VERSION__"
+  exit 0
+fi
 while [ "$#" -gt 0 ]; do
   case "$1" in
     -G)
@@ -1757,9 +1845,8 @@ while [ "$#" -gt 0 ]; do
   shift || true
 done
 "#
-        .as_bytes(),
-    )
-    .unwrap();
+    .replace("__SOUFFLE_VERSION__", SUPPORTED_SOUFFLE_VERSION);
+    file.write_all(script_source.as_bytes()).unwrap();
     file.flush().unwrap();
     file.sync_all().unwrap();
     drop(file);

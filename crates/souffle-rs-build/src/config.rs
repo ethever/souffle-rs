@@ -2,6 +2,9 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     ffi::OsString,
     path::{Path, PathBuf},
+    process::Command,
+    thread,
+    time::Duration,
 };
 
 use serde::{Deserialize, Serialize};
@@ -9,7 +12,7 @@ use souffle_rs::RelationBundle;
 use strum::IntoStaticStr;
 
 use crate::{
-    BuildError, BuildMetadata, BuildPlan, CargoDirective, ExternalLibraryMetadata,
+    BuildError, BuildMetadata, BuildPlan, CargoDirective, CommandFailure, ExternalLibraryMetadata,
     NativeBuildMetadata, OpenMpMetadata, ProgramMetadata, SouffleCommand,
     artifacts::{emit_requested_artifacts, validate_schema_bundle},
     execute::{
@@ -22,6 +25,14 @@ const NATIVE_STATIC_LIBRARY: &str = "souffle_rs_generated";
 const CARGO_OUT_DIR_SUBDIRECTORY: &str = "souffle-rs";
 const NATIVE_COMPILER_ENV_PREFIXES: &[&str] = &["CC", "CFLAGS", "CXX", "CXXFLAGS", "CXXSTDLIB"];
 const NATIVE_COMPILER_ENV_BASE: &[&str] = &["HOST", "OPT_LEVEL", "PROFILE", "TARGET"];
+
+#[cfg(not(feature = "souffle-2-4-1"))]
+compile_error!(
+    "souffle-rs-build currently supports only Souffle 2.4.1; enable the `souffle-2-4-1` feature"
+);
+
+/// Exact Souffle version supported by this `souffle-rs-build` crate build.
+pub const SUPPORTED_SOUFFLE_VERSION: &str = "2.4.1";
 
 /// Souffle generated output mode.
 ///
@@ -576,12 +587,12 @@ impl Build {
         self
     }
 
-    /// Record the Souffle version in build metadata.
+    /// Record the Souffle version in side-effect-free build metadata.
     ///
-    /// This is a reproducibility annotation, not a runtime check against the
-    /// configured Souffle binary or include directory. External Souffle
-    /// toolchain versions should be pinned by the environment, package manager,
-    /// container image, or an explicit build-script check.
+    /// This is a planning-time reproducibility annotation for [`Build::metadata`].
+    /// [`Build::compile`] always runs `souffle --version`, requires the exact
+    /// [`SUPPORTED_SOUFFLE_VERSION`] selected by Cargo features, and records the
+    /// detected version in returned and emitted metadata.
     pub fn souffle_version(mut self, version: impl Into<String>) -> Self {
         self.souffle_version = Some(version.into());
         self
@@ -861,6 +872,7 @@ impl Build {
     pub fn compile(&self) -> Result<BuildMetadata, BuildError> {
         let plan = self.plan()?;
         let mut metadata = self.metadata()?;
+        metadata.souffle_version = Some(self.detect_supported_souffle_version()?);
         let schema_bundles = self.resolve_schema_bundles(&metadata)?;
         validate_schema_bundles(&metadata, &schema_bundles)?;
         emit_cargo_directives(&plan);
@@ -870,6 +882,74 @@ impl Build {
         compile_native_artifacts(self, &metadata)?;
         emit_metadata(&metadata)?;
         Ok(metadata)
+    }
+
+    fn detect_supported_souffle_version(&self) -> Result<String, BuildError> {
+        let command_line = format!("{} --version", self.souffle_bin.display());
+        let working_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let output = self.run_souffle_version_command(command_line.as_str(), &working_dir)?;
+
+        if !output.status.success() {
+            return Err(BuildError::CommandFailed(Box::new(CommandFailure {
+                program: "souffle-version".to_owned(),
+                command: command_line,
+                working_dir: working_dir.display().to_string(),
+                status: output
+                    .status
+                    .code()
+                    .map_or_else(|| "signal".to_owned(), |code| code.to_string()),
+                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            })));
+        }
+
+        let version_output = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let Some(actual) = parse_souffle_version(version_output.as_str()) else {
+            return Err(BuildError::UnparseableSouffleVersion {
+                souffle_bin: self.souffle_bin.display().to_string(),
+                output: compact_version_output(version_output.as_str()),
+            });
+        };
+        if actual != SUPPORTED_SOUFFLE_VERSION {
+            return Err(BuildError::UnsupportedSouffleVersion {
+                souffle_bin: self.souffle_bin.display().to_string(),
+                expected: SUPPORTED_SOUFFLE_VERSION.to_owned(),
+                actual,
+            });
+        }
+        Ok(actual)
+    }
+
+    fn run_souffle_version_command(
+        &self,
+        command_line: &str,
+        working_dir: &Path,
+    ) -> Result<std::process::Output, BuildError> {
+        let mut attempts = 0;
+        loop {
+            match Command::new(&self.souffle_bin)
+                .arg("--version")
+                .current_dir(working_dir)
+                .output()
+            {
+                Ok(output) => return Ok(output),
+                Err(source) if is_executable_busy(&source) && attempts < 5 => {
+                    attempts += 1;
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(source) => {
+                    return Err(BuildError::CommandSpawnFailed {
+                        command: command_line.to_owned(),
+                        working_dir: working_dir.display().to_string(),
+                        message: source.to_string(),
+                    });
+                }
+            }
+        }
     }
 
     fn validate(&self) -> Result<(), BuildError> {
@@ -1481,6 +1561,10 @@ fn is_watchable_tool_path(path: &Path) -> bool {
     path.is_absolute() || path.components().count() > 1
 }
 
+fn is_executable_busy(error: &std::io::Error) -> bool {
+    error.raw_os_error() == Some(26)
+}
+
 fn cargo_build_output_root() -> Result<PathBuf, BuildError> {
     Ok(cargo_env_path("OUT_DIR")?.join(CARGO_OUT_DIR_SUBDIRECTORY))
 }
@@ -1502,6 +1586,41 @@ fn absolute_path_string(path: &Path) -> String {
             .join(path)
     };
     path.display().to_string()
+}
+
+fn parse_souffle_version(output: &str) -> Option<String> {
+    output.lines().find_map(|line| {
+        let line = line.trim();
+        let version = line.strip_prefix("Version:").map(str::trim).unwrap_or(line);
+        let token = version.split_whitespace().next()?;
+        is_semver_like(token).then(|| token.to_owned())
+    })
+}
+
+fn is_semver_like(value: &str) -> bool {
+    let mut parts = value.split('.');
+    let Some(major) = parts.next() else {
+        return false;
+    };
+    let Some(minor) = parts.next() else {
+        return false;
+    };
+    let Some(patch) = parts.next() else {
+        return false;
+    };
+    parts.next().is_none()
+        && [major, minor, patch]
+            .into_iter()
+            .all(|part| !part.is_empty() && part.chars().all(|ch| ch.is_ascii_digit()))
+}
+
+fn compact_version_output(output: &str) -> String {
+    output
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

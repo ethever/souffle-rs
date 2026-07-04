@@ -112,6 +112,26 @@ pub enum BuildError {
         /// Target triple that cannot support the capability.
         target: String,
     },
+    /// The configured Souffle binary is not the version this crate was built to support.
+    #[error(
+        "unsupported Souffle version from `{souffle_bin}`: expected `{expected}`, got `{actual}`"
+    )]
+    UnsupportedSouffleVersion {
+        /// Souffle binary that reported the version.
+        souffle_bin: String,
+        /// Exact supported Souffle version selected by Cargo features.
+        expected: String,
+        /// Version reported by the configured Souffle binary.
+        actual: String,
+    },
+    /// The configured Souffle binary did not print a parseable version.
+    #[error("failed to parse Souffle version from `{souffle_bin}` output: {output}")]
+    UnparseableSouffleVersion {
+        /// Souffle binary that produced the output.
+        souffle_bin: String,
+        /// Combined stdout/stderr from `souffle --version`.
+        output: String,
+    },
     /// JSON metadata serialization failed.
     #[error("failed to serialize build metadata: {message}")]
     MetadataSerialization {

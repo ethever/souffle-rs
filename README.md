@@ -54,6 +54,11 @@ generated typed Rust API used from `src/main.rs`. Set
 `SOUFFLE_RS_SOUFFLE_BIN` and `SOUFFLE_RS_SOUFFLE_INCLUDE` if Souffle is not
 discoverable from `PATH` and its install prefix.
 
+`souffle-rs-build` currently supports exactly Souffle `2.4.1`, selected by the
+default Cargo feature `souffle-2-4-1`. `Build::compile()` checks
+`souffle --version` before schema extraction or code generation and fails if the
+configured binary reports a different version.
+
 The safe runtime exposes backend-neutral `PerformanceRecorder` /
 `PerformanceMetrics` values for benchmark harnesses. The metrics record total
 time, Souffle run time, relation insertion time, relation output decode time,
