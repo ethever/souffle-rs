@@ -2,8 +2,17 @@
 
 Each subdirectory is a standalone package with its own `Cargo.toml` and
 `src/main.rs`. The lightweight examples are workspace members so they build in
-normal CI. `embedded-build` is intentionally opt-in because it needs Souffle
-headers and a C++ compiler during Cargo's build-script phase.
+normal CI. The embedded examples are intentionally opt-in because they need
+Souffle headers and a C++ compiler during Cargo's build-script phase.
+
+The main examples cover the schema/build integration matrix:
+
+| Schema source | API/backend shape | Cargo build script | Example |
+| --- | --- | --- | --- |
+| Hand-written `RelationBundle` | Runtime dynamic API | No | `dynamic-api` |
+| Hand-written `RelationBundle` | Generated typed/native API | Yes | `embedded-build` |
+| Extracted from Souffle | Artifact export only | No | `auto-schema` |
+| Extracted from Souffle | Generated typed/native API | Yes | `embedded-auto-schema` |
 
 Run the dynamic runtime API example:
 
@@ -57,6 +66,18 @@ That package demonstrates the standard Cargo integration path:
 4. The build helper emits the C ABI wrapper and typed Rust API.
 5. Cargo compiles the generated C++ into a native library.
 6. `src/main.rs` uses `EmbeddedProgram` and the generated typed API.
+
+Run the embedded build-script flow with automatically extracted schema metadata:
+
+```bash
+cargo run --manifest-path examples/embedded-auto-schema/Cargo.toml
+```
+
+That package demonstrates the same standard Cargo integration path without a
+hand-written `.schema_bundle(...)`. `build.rs` extracts schema metadata from
+Souffle, emits schema JSON and typed Rust API, compiles the generated C++ into a
+native library, and `src/main.rs` loads the generated schema JSON before using
+the generated typed API.
 
 Set `SOUFFLE_RS_SOUFFLE_BIN` and `SOUFFLE_RS_SOUFFLE_INCLUDE` when Souffle is
 installed outside `PATH` or its headers are not under the same installation
