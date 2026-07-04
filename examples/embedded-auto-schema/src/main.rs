@@ -4,15 +4,20 @@
 //! The `build.rs` in this package does not pass a hand-written
 //! `RelationBundle`. It extracts schema from Souffle metadata, emits schema JSON
 //! and typed Rust API, builds the generated C++ into a native library, and makes
-//! both generated artifacts available to this binary through environment
-//! variables.
+//! both generated artifacts available through Cargo's deterministic `OUT_DIR`.
 
-include!(env!("SOUFFLE_RS_EXAMPLE_AUTO_REACHABILITY_MODULE"));
+include!(concat!(
+    env!("OUT_DIR"),
+    "/souffle-rs/rust/reachability_mod.rs"
+));
 
 use souffle_rs::{EmbeddedProgram, Program, RelationBundle};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let schema_json = include_str!(env!("SOUFFLE_RS_EXAMPLE_AUTO_REACHABILITY_SCHEMA"));
+    let schema_json = include_str!(concat!(
+        env!("OUT_DIR"),
+        "/souffle-rs/schema/reachability.json"
+    ));
     let schema: RelationBundle = serde_json::from_str(schema_json)?;
     schema.validate()?;
 

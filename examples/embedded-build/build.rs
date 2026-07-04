@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
     })?;
 
-    let metadata = Build::new()
+    let build_metadata = Build::new()
         .program("reachability", &logic_path)
         .souffle_bin(&souffle_bin)
         .souffle_include(&souffle_include)
@@ -51,22 +51,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         .compile_native(true)
         .compile()?;
 
-    let typed_api = metadata.programs[0]
+    let typed_api = build_metadata.programs[0]
         .typed_api_artifact
         .as_ref()
         .expect("typed API was requested");
-    let module_path = out_dir.join("rust/reachability_mod.rs");
     fs::write(
-        &module_path,
+        out_dir.join("rust/reachability_mod.rs"),
         format!(
             "#[allow(clippy::needless_lifetimes)]\n#[path = \"{}\"]\npub mod reachability;\n",
             typed_api.display().to_string().escape_default()
         ),
     )?;
-    println!(
-        "cargo:rustc-env=SOUFFLE_RS_EXAMPLE_REACHABILITY_MODULE={}",
-        module_path.display()
-    );
     Ok(())
 }
 

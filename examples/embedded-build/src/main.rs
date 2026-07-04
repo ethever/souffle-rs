@@ -2,10 +2,13 @@
 //!
 //! The `build.rs` in this package compiles `logic/reachability.dl`, emits the
 //! C ABI wrapper and typed Rust API, builds the generated C++ into a native
-//! library, and makes the generated typed API available to this binary through
-//! an environment variable.
+//! library, and makes the generated typed API available through Cargo's
+//! deterministic `OUT_DIR`.
 
-include!(env!("SOUFFLE_RS_EXAMPLE_REACHABILITY_MODULE"));
+include!(concat!(
+    env!("OUT_DIR"),
+    "/souffle-rs/rust/reachability_mod.rs"
+));
 
 use souffle_rs::{EmbeddedProgram, Program};
 

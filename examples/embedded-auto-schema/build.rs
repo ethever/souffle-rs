@@ -47,31 +47,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         .compile_native(true)
         .compile()?;
 
-    let program = &build_metadata.programs[0];
-    let schema_artifact = program
-        .schema_artifact
-        .as_ref()
-        .expect("schema artifact was requested");
-    let typed_api = program
+    let typed_api = build_metadata.programs[0]
         .typed_api_artifact
         .as_ref()
         .expect("typed API was requested");
-    let module_path = out_dir.join("rust/reachability_mod.rs");
     fs::write(
-        &module_path,
+        out_dir.join("rust/reachability_mod.rs"),
         format!(
             "#[allow(clippy::needless_lifetimes)]\n#[path = \"{}\"]\npub mod reachability;\n",
             typed_api.display().to_string().escape_default()
         ),
     )?;
-    println!(
-        "cargo:rustc-env=SOUFFLE_RS_EXAMPLE_AUTO_REACHABILITY_MODULE={}",
-        module_path.display()
-    );
-    println!(
-        "cargo:rustc-env=SOUFFLE_RS_EXAMPLE_AUTO_REACHABILITY_SCHEMA={}",
-        schema_artifact.display()
-    );
     Ok(())
 }
 
