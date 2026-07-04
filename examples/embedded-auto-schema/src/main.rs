@@ -6,12 +6,16 @@
 //! and typed Rust API, builds the generated C++ into a native library, and makes
 //! both generated artifacts available through Cargo's deterministic `OUT_DIR`.
 
-include!(concat!(
-    env!("OUT_DIR"),
-    "/souffle-rs/rust/reachability_mod.rs"
-));
+mod generated {
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/souffle-rs/rust/reachability_mod.rs"
+    ));
+}
 
 use souffle_rs::{EmbeddedProgram, Program, RelationBundle};
+
+use generated::reachability;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let schema_json = include_str!(concat!(

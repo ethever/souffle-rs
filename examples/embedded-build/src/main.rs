@@ -5,12 +5,16 @@
 //! library, and makes the generated typed API available through Cargo's
 //! deterministic `OUT_DIR`.
 
-include!(concat!(
-    env!("OUT_DIR"),
-    "/souffle-rs/rust/reachability_mod.rs"
-));
+mod generated {
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/souffle-rs/rust/reachability_mod.rs"
+    ));
+}
 
 use souffle_rs::{EmbeddedProgram, Program};
+
+use generated::reachability;
 
 mod schema;
 
