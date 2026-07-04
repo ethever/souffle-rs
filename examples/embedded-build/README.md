@@ -3,7 +3,7 @@
 This is an opt-in standalone package that demonstrates the full embedded flow:
 
 1. `logic/reachability.dl` is the Souffle source.
-2. `build.rs` calls `souffle-rs-build`.
+2. `build.rs` calls `souffle-rs-build` with `out_dir_from_cargo_env()`.
 3. Souffle generates C++ and schema metadata.
 4. The C ABI wrapper and typed Rust API are emitted.
 5. The generated C++ is compiled into a native library.

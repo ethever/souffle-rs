@@ -19,6 +19,7 @@ use crate::{
 };
 
 const NATIVE_STATIC_LIBRARY: &str = "souffle_rs_generated";
+const CARGO_OUT_DIR_SUBDIRECTORY: &str = "souffle-rs";
 const NATIVE_COMPILER_ENV_PREFIXES: &[&str] = &["CC", "CFLAGS", "CXX", "CXXFLAGS", "CXXSTDLIB"];
 const NATIVE_COMPILER_ENV_BASE: &[&str] = &["HOST", "OPT_LEVEL", "PROFILE", "TARGET"];
 
@@ -711,6 +712,17 @@ impl Build {
         self
     }
 
+    /// Use Cargo's build-script output directory for generated artifacts.
+    ///
+    /// This is the recommended output configuration for `build.rs`
+    /// integrations. It keeps generated C++, Rust, schema, native libraries,
+    /// and metadata under Cargo's build-script output root without requiring
+    /// application build scripts to name the internal directory layout.
+    pub fn out_dir_from_cargo_env(mut self) -> Result<Self, BuildError> {
+        self.out_dir = cargo_build_output_root()?;
+        Ok(self)
+    }
+
     /// Validate and produce deterministic commands/directives without running
     /// external tools.
     pub fn plan(&self) -> Result<BuildPlan, BuildError> {
@@ -1346,6 +1358,15 @@ impl Default for Build {
     }
 }
 
+/// Return a path inside the current Cargo package manifest directory.
+///
+/// This is a small convenience for build scripts that keep Souffle sources
+/// under their package directory and want to avoid spelling Cargo environment
+/// variables directly.
+pub fn cargo_manifest_path(path: impl AsRef<Path>) -> Result<PathBuf, BuildError> {
+    Ok(cargo_env_path("CARGO_MANIFEST_DIR")?.join(path))
+}
+
 fn validate_schema_bundles(
     metadata: &BuildMetadata,
     schemas: &BTreeMap<String, RelationBundle>,
@@ -1394,6 +1415,18 @@ fn require_namespace_value(value: &str, field: &'static str) -> Result<(), Build
 
 fn is_watchable_tool_path(path: &Path) -> bool {
     path.is_absolute() || path.components().count() > 1
+}
+
+fn cargo_build_output_root() -> Result<PathBuf, BuildError> {
+    Ok(cargo_env_path("OUT_DIR")?.join(CARGO_OUT_DIR_SUBDIRECTORY))
+}
+
+fn cargo_env_path(variable: &'static str) -> Result<PathBuf, BuildError> {
+    let value = std::env::var_os(variable).ok_or(BuildError::MissingCargoEnv { variable })?;
+    if value.is_empty() {
+        return Err(BuildError::EmptyValue { field: variable });
+    }
+    Ok(PathBuf::from(value))
 }
 
 fn absolute_path_string(path: &Path) -> String {

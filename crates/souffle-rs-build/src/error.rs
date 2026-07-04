@@ -90,6 +90,12 @@ pub enum BuildError {
         /// Configuration field whose value was empty.
         field: &'static str,
     },
+    /// A required Cargo build-script environment variable was not set.
+    #[error("missing Cargo environment variable `{variable}`")]
+    MissingCargoEnv {
+        /// Cargo environment variable name.
+        variable: &'static str,
+    },
     /// A configured identifier-like value was malformed.
     #[error("invalid identifier `{value}` configured for `{field}`")]
     InvalidIdentifierValue {

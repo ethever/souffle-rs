@@ -1,9 +1,11 @@
 use std::{
-    ffi::OsString,
+    env,
+    ffi::{OsStr, OsString},
     fs,
     io::Write,
     path::{Path, PathBuf},
     process::Command,
+    sync::Mutex,
 };
 
 #[cfg(unix)]
@@ -12,9 +14,11 @@ use std::os::unix::fs::PermissionsExt;
 use crate::{
     Build, BuildError, CargoDirective, CppStandard, ExternalLibrary, ExternalLibraryKind,
     FunctorLibrary, GeneratedMode, LinkMode, NativeLinkMode, OpenMpConfig,
-    config::native_compiler_env_vars,
+    config::{cargo_manifest_path, native_compiler_env_vars},
 };
 use souffle_rs::{AttributeSchema, RelationBundle, RelationId, RelationSchema, TypeRef};
+
+static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 fn configured_build() -> Build {
     Build::new()
@@ -146,6 +150,41 @@ fn assert_invalid_identifier_error(build: Build, field: &'static str, value: &st
         BuildError::InvalidIdentifierValue {
             field,
             value: value.to_owned(),
+        }
+    );
+}
+
+#[test]
+fn cargo_env_helpers_hide_generated_output_layout() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let tempdir = tempfile::tempdir().unwrap();
+    let manifest_dir = tempdir.path().join("package");
+    let cargo_out_dir = tempdir.path().join("cargo-out");
+    fs::create_dir_all(&manifest_dir).unwrap();
+    let _manifest = EnvVarGuard::set("CARGO_MANIFEST_DIR", &manifest_dir);
+    let _out = EnvVarGuard::set("OUT_DIR", &cargo_out_dir);
+
+    let logic_path = cargo_manifest_path("logic/reachability.dl").unwrap();
+    let metadata = Build::new()
+        .out_dir_from_cargo_env()
+        .unwrap()
+        .program("analysis", &logic_path)
+        .metadata()
+        .unwrap();
+
+    assert_eq!(logic_path, manifest_dir.join("logic/reachability.dl"));
+    assert_eq!(metadata.out_dir, cargo_out_dir.join("souffle-rs"));
+}
+
+#[test]
+fn out_dir_from_cargo_env_reports_missing_out_dir() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let _out = EnvVarGuard::unset("OUT_DIR");
+
+    assert_eq!(
+        Build::new().out_dir_from_cargo_env().unwrap_err(),
+        BuildError::MissingCargoEnv {
+            variable: "OUT_DIR",
         }
     );
 }
@@ -1279,6 +1318,47 @@ fn assert_generated_rust_compiles(path: &Path) {
         String::from_utf8_lossy(&rustc_output.stdout),
         String::from_utf8_lossy(&rustc_output.stderr)
     );
+}
+
+struct EnvVarGuard {
+    name: &'static str,
+    previous: Option<OsString>,
+}
+
+impl EnvVarGuard {
+    fn set(name: &'static str, value: impl AsRef<OsStr>) -> Self {
+        let guard = Self {
+            name,
+            previous: env::var_os(name),
+        };
+        unsafe {
+            env::set_var(name, value);
+        }
+        guard
+    }
+
+    fn unset(name: &'static str) -> Self {
+        let guard = Self {
+            name,
+            previous: env::var_os(name),
+        };
+        unsafe {
+            env::remove_var(name);
+        }
+        guard
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        unsafe {
+            if let Some(previous) = &self.previous {
+                env::set_var(self.name, previous);
+            } else {
+                env::remove_var(self.name);
+            }
+        }
+    }
 }
 
 #[test]

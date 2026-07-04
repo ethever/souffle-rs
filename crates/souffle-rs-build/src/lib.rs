@@ -42,6 +42,7 @@
 //! .collect();
 //!
 //! let metadata = Build::new()
+//!     .out_dir_from_cargo_env()?
 //!     .program("analysis", "logic/main.dl")
 //!     .souffle_bin("souffle")
 //!     .souffle_include("/opt/souffle/include")
@@ -82,7 +83,7 @@ mod schema_extract;
 
 pub use config::{
     Build, CppStandard, ExternalLibrary, ExternalLibraryKind, FunctorLibrary, GeneratedMode,
-    LinkMode, NativeLinkMode, OpenMpConfig,
+    LinkMode, NativeLinkMode, OpenMpConfig, cargo_manifest_path,
 };
 pub use error::{BuildError, CommandFailure, NativeCompileFailure};
 pub use metadata::{

@@ -5,22 +5,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use souffle_rs_build::{Build, CppStandard, GeneratedMode};
+use souffle_rs_build::{Build, CppStandard, GeneratedMode, cargo_manifest_path};
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-env-changed=SOUFFLE_RS_SOUFFLE_BIN");
     println!("cargo:rerun-if-env-changed=SOUFFLE_RS_SOUFFLE_INCLUDE");
 
-    let manifest_dir =
-        PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").ok_or_else(|| {
-            io::Error::new(io::ErrorKind::NotFound, "CARGO_MANIFEST_DIR is not set")
-        })?);
-    let out_dir = PathBuf::from(
-        env::var_os("OUT_DIR")
-            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "OUT_DIR is not set"))?,
-    )
-    .join("souffle-rs");
-    let logic_path = manifest_dir.join("logic/reachability.dl");
+    let logic_path = cargo_manifest_path("logic/reachability.dl")?;
     let souffle_bin = find_souffle_bin();
     let souffle_include = find_souffle_include(&souffle_bin).ok_or_else(|| {
         io::Error::new(
@@ -33,13 +24,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     })?;
 
     Build::new()
+        .out_dir_from_cargo_env()?
         .program("reachability", &logic_path)
         .souffle_bin(&souffle_bin)
         .souffle_include(&souffle_include)
         .generated_namespace("reachability_auto_schema_generated")
         .generated_mode(GeneratedMode::SingleFile)
         .cpp_standard(CppStandard::Cxx17)
-        .out_dir(&out_dir)
         .emit_c_header(true)
         .emit_cxx_wrapper(true)
         .emit_schema(true)

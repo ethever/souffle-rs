@@ -61,7 +61,7 @@ cargo run --manifest-path examples/embedded-build/Cargo.toml
 That package demonstrates the standard Cargo integration path:
 
 1. `logic/reachability.dl` is the independent Souffle source file.
-2. `build.rs` calls `souffle-rs-build`.
+2. `build.rs` calls `souffle-rs-build` with `out_dir_from_cargo_env()`.
 3. Souffle emits generated C++ and schema metadata.
 4. The build helper emits the C ABI wrapper and typed Rust API.
 5. Cargo compiles the generated C++ into a native library.
@@ -76,10 +76,10 @@ cargo run --manifest-path examples/embedded-auto-schema/Cargo.toml
 ```
 
 That package demonstrates the same standard Cargo integration path without a
-hand-written `.schema_bundle(...)`. `build.rs` extracts schema metadata from
-Souffle, emits schema JSON and typed Rust API, compiles the generated C++ into a
-native library, and `src/main.rs` uses the generated `schema_bundle()` before
-using the generated typed API.
+hand-written `.schema_bundle(...)`. `build.rs` uses the Cargo build-script
+output API, extracts schema metadata from Souffle, emits schema JSON and typed
+Rust API, compiles the generated C++ into a native library, and `src/main.rs`
+uses the generated `schema_bundle()` before using the generated typed API.
 
 Set `SOUFFLE_RS_SOUFFLE_BIN` and `SOUFFLE_RS_SOUFFLE_INCLUDE` when Souffle is
 installed outside `PATH` or its headers are not under the same installation

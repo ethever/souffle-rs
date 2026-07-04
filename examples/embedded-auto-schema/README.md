@@ -4,7 +4,8 @@ This is an opt-in standalone package that demonstrates the full embedded flow
 without a hand-written schema bundle:
 
 1. `logic/reachability.dl` is the Souffle source.
-2. `build.rs` calls `souffle-rs-build` without `.schema_bundle(...)`.
+2. `build.rs` calls `souffle-rs-build` with `out_dir_from_cargo_env()`, but
+   without `.schema_bundle(...)`.
 3. Souffle generates C++ and transformed AST schema metadata.
 4. The build helper emits schema JSON, the C ABI wrapper, and typed Rust API.
 5. Cargo compiles the generated C++ into a native library.
