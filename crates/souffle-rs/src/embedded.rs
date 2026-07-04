@@ -27,6 +27,12 @@ pub(crate) use iterator::EmbeddedRelationIterator;
 /// C ABI wrapper, compiles the generated C++, and records the schema bundle
 /// used here for validation and decoding.
 ///
+/// **Performance note:** [`Program::insert_row`] currently encodes and crosses
+/// the FFI boundary once per row. [`Program::read_relation`] materializes the
+/// complete output relation. Prefer [`Program::iter_relation`] and
+/// [`crate::RelationIterator::next_chunk`] for large outputs, and keep input
+/// batching in mind for high-volume ingestion.
+///
 /// # Example
 ///
 /// ```no_run
@@ -56,7 +62,8 @@ pub(crate) use iterator::EmbeddedRelationIterator;
 ///
 /// program.insert_row("Input", [Value::Number(7)])?;
 /// program.run()?;
-/// let _rows = program.read_relation("Output")?;
+/// let mut rows = program.iter_relation("Output")?;
+/// let _first = rows.next_row()?;
 /// # Ok(())
 /// # }
 /// ```

@@ -22,6 +22,10 @@ const FORMAT_VERSION: u32 = 1;
 /// parity. It writes one schema artifact, one manifest, and one JSONL row file
 /// per exported relation.
 ///
+/// **Performance note:** exports stream rows from the source program, but
+/// loading an exported relation back with [`FileRelationStore::load_outputs`]
+/// materializes those rows into memory.
+///
 /// # Example
 ///
 /// ```
@@ -70,6 +74,10 @@ impl FileRelationStore {
     }
 
     /// Export selected printable relations from a program.
+    ///
+    /// **Recommended for large relation exports:** this streams rows from
+    /// [`Program::iter_relation`] into JSONL files instead of calling
+    /// [`Program::read_relation`].
     pub fn export_outputs<P, S>(
         &self,
         program: &P,
@@ -107,6 +115,10 @@ impl FileRelationStore {
     }
 
     /// Load all relation outputs referenced by the manifest.
+    ///
+    /// **Performance note:** this materializes every referenced relation into
+    /// memory. Use a [`FileProgram`] plus [`Program::iter_relation`] when
+    /// inspecting large exported relations incrementally.
     pub fn load_outputs(&self) -> Result<Vec<RelationOutput>, SouffleError> {
         let manifest = self.load_manifest()?;
         manifest
@@ -368,6 +380,12 @@ impl FileRelationStore {
 /// [`FileRelationStore`]. This backend is intended for parity, debugging,
 /// durable exports, and crash-inspection workflows where users want the same
 /// safe [`Program`] API over inspectable files.
+///
+/// **Performance note:** [`Program::insert_row`] on this backend reads the
+/// current relation rows and rewrites the JSONL artifact for every inserted
+/// row. For large relation setup, prefer [`FileProgram::replace_relation_rows`]
+/// or streaming export through [`FileRelationStore::export_outputs`], and prefer
+/// [`Program::iter_relation`] over [`Program::read_relation`] for outputs.
 ///
 /// # Example
 ///

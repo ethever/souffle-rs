@@ -17,6 +17,12 @@ use crate::{
 /// this trait, but the dynamic API is useful for schema-driven tools, tests,
 /// parity checks, and integrations that discover relations at runtime.
 ///
+/// **Use streaming APIs for large relations:** prefer [`Program::iter_relation`],
+/// [`Program::iter_relation_by_handle`], [`RelationIterator::next_row`], and
+/// [`RelationIterator::next_chunk`] when a relation may be large. The
+/// `read_relation*` helpers intentionally materialize complete relations into
+/// Rust-owned vectors.
+///
 /// # Example
 ///
 /// ```
@@ -48,8 +54,8 @@ use crate::{
 /// program.replace_relation_rows("Output", [Row::new([Value::Number(7)])])?;
 /// program.run()?;
 ///
-/// let output = program.read_relation("Output")?;
-/// assert_eq!(output.rows()[0].values(), &[Value::Number(7)]);
+/// let mut output = program.iter_relation("Output")?;
+/// assert_eq!(output.next_row()?.unwrap().values(), &[Value::Number(7)]);
 /// # Ok(())
 /// # }
 /// ```
@@ -160,9 +166,19 @@ pub trait Program {
     }
 
     /// Insert one row into a loadable relation.
+    ///
+    /// **Performance note:** this is a convenience API, not a bulk ingestion
+    /// API. File and SQLite backends read and rewrite relation storage for each
+    /// inserted row, embedded backends cross the FFI boundary once per row, and
+    /// process backends buffer rows before writing `.facts` files at run time.
+    /// Prefer backend-specific bulk/export paths when loading large inputs.
     fn insert_row(&mut self, relation: &str, row: impl Into<Row>) -> Result<(), SouffleError>;
 
     /// Insert one row into a loadable relation addressed by handle.
+    ///
+    /// **Performance note:** this calls [`Program::insert_row`], so the same
+    /// per-row backend costs apply. Prefer bulk ingestion or export-oriented
+    /// APIs when loading large relations.
     ///
     /// # Example
     ///
@@ -212,12 +228,18 @@ pub trait Program {
     }
 
     /// Iterate one printable relation.
+    ///
+    /// **Recommended for large relations:** this returns a streaming
+    /// [`RelationIterator`] instead of materializing the whole relation.
     fn iter_relation<'program>(
         &'program self,
         relation: &str,
     ) -> Result<RelationIterator<'program>, SouffleError>;
 
     /// Iterate one printable relation addressed by handle.
+    ///
+    /// **Recommended for large relations:** this returns a streaming
+    /// [`RelationIterator`] instead of materializing the whole relation.
     ///
     /// # Example
     ///
@@ -255,6 +277,11 @@ pub trait Program {
     }
 
     /// Materialize one printable relation using the backend's streaming path.
+    ///
+    /// **Performance note:** this collects the entire relation into a
+    /// [`RelationOutput`] backed by `Vec<Row>`. Use [`Program::iter_relation`],
+    /// [`RelationIterator::next_row`], or [`RelationIterator::next_chunk`] for
+    /// large outputs.
     fn read_relation(&self, relation: &str) -> Result<RelationOutput, SouffleError> {
         let mut iterator = self.iter_relation(relation)?;
         let schema = iterator.schema().clone();
@@ -266,6 +293,11 @@ pub trait Program {
     }
 
     /// Materialize one printable relation addressed by handle.
+    ///
+    /// **Performance note:** this collects the entire relation into a
+    /// [`RelationOutput`] backed by `Vec<Row>`. Use
+    /// [`Program::iter_relation_by_handle`], [`RelationIterator::next_row`], or
+    /// [`RelationIterator::next_chunk`] for large outputs.
     ///
     /// # Example
     ///
@@ -701,6 +733,11 @@ impl RelationOutput {
 /// prevents running, mutating, or dropping the program while rows are still
 /// being streamed.
 ///
+/// **Recommended for large relations:** use this iterator instead of
+/// [`Program::read_relation`] or generated typed `read()` helpers. Chunked
+/// iteration bounds peak Rust memory to the requested chunk size plus backend
+/// buffering.
+///
 /// # Example
 ///
 /// ```
@@ -796,6 +833,9 @@ impl<'program> RelationIterator<'program> {
     }
 
     /// Return the next decoded row.
+    ///
+    /// **Recommended for streaming:** this avoids collecting the whole relation
+    /// into a `Vec<Row>`.
     pub fn next_row(&mut self) -> Result<Option<Row>, SouffleError> {
         self.source.next_row(&self.schema)
     }
@@ -804,6 +844,11 @@ impl<'program> RelationIterator<'program> {
     ///
     /// A zero-sized chunk request returns an empty vector without querying the
     /// backend. Reaching the end of the relation also returns an empty vector.
+    ///
+    /// **Performance note:** each returned chunk is still materialized as a
+    /// `Vec<Row>`. For embedded backends, the C++ wrapper also materializes up
+    /// to `max_rows` rows before Rust decodes them. Choose a chunk size that
+    /// balances memory use against backend/FFI call overhead.
     ///
     /// # Example
     ///

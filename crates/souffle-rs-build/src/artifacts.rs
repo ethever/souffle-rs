@@ -421,6 +421,14 @@ fn render_relation_handle(
     output.push_str("    }\n");
 
     if relation.is_loadable() {
+        output.push_str("    /// Insert one typed row into this loadable relation.\n");
+        output.push_str(
+            "    ///\n    /// **Performance note:** this calls `Program::insert_row_by_handle`, so the backend's\n",
+        );
+        output.push_str(
+            "    /// per-row insertion costs apply. Prefer backend-specific bulk ingestion paths for\n",
+        );
+        output.push_str("    /// large inputs when they are available.\n");
         output.push_str(&format!(
             "    pub fn insert<P>(program: &mut P, row: {row_type}) -> Result<(), SouffleError>\n"
         ));
@@ -434,6 +442,11 @@ fn render_relation_handle(
     if relation.is_printable() {
         let iterator_type = iterator_type.expect("printable relation has a typed iterator");
 
+        output.push_str("    /// Iterate this printable relation as dynamic rows.\n");
+        output.push_str(
+            "    ///\n    /// **Recommended for large relations:** this streams rows instead of materializing\n",
+        );
+        output.push_str("    /// the complete relation.\n");
         output.push_str(
             "    pub fn iter<'program, P>(program: &'program P) -> Result<souffle_rs::RelationIterator<'program>, SouffleError>\n",
         );
@@ -442,6 +455,11 @@ fn render_relation_handle(
         output.push_str("    {\n");
         output.push_str("        program.iter_relation_by_handle(&Self::handle())\n");
         output.push_str("    }\n");
+        output.push_str("    /// Iterate this printable relation as generated typed rows.\n");
+        output.push_str(
+            "    ///\n    /// **Recommended for large relations:** consume rows with `next_row()` or\n",
+        );
+        output.push_str("    /// `next_chunk()` instead of calling `read()`.\n");
         output.push_str(&format!(
             "    pub fn iter_typed<'program, P>(program: &'program P) -> Result<{iterator_type}<'program>, SouffleError>\n"
         ));
@@ -452,6 +470,13 @@ fn render_relation_handle(
             "        Ok({iterator_type} {{ inner: program.iter_relation_by_handle(&Self::handle())? }})\n"
         ));
         output.push_str("    }\n");
+        output.push_str("    /// Materialize this printable relation as generated typed rows.\n");
+        output.push_str(
+            "    ///\n    /// **Performance note:** this collects the whole relation into a `Vec`. Use\n",
+        );
+        output.push_str(
+            "    /// `iter_typed()`, `next_row()`, or `next_chunk()` for large outputs.\n",
+        );
         output.push_str(&format!(
             "    pub fn read<P>(program: &P) -> Result<Vec<{row_type}>, SouffleError>\n"
         ));
@@ -471,11 +496,17 @@ fn render_relation_handle(
 }
 
 fn render_typed_iterator(output: &mut String, iterator_type: &str, row_type: &str) {
+    output.push_str("/// Streaming typed iterator for one generated relation.\n");
+    output.push_str(
+        "///\n/// **Recommended for large relations:** use this iterator instead of generated\n",
+    );
+    output.push_str("/// relation `read()` helpers to avoid whole-relation materialization.\n");
     output.push_str("#[derive(Debug)]\n");
     output.push_str(&format!("pub struct {iterator_type}<'program> {{\n"));
     output.push_str("    inner: souffle_rs::RelationIterator<'program>,\n");
     output.push_str("}\n\n");
     output.push_str(&format!("impl<'program> {iterator_type}<'program> {{\n"));
+    output.push_str("    /// Return the next typed row without collecting the whole relation.\n");
     output.push_str(&format!(
         "    pub fn next_row(&mut self) -> Result<Option<{row_type}>, SouffleError> {{\n"
     ));
@@ -486,6 +517,11 @@ fn render_typed_iterator(output: &mut String, iterator_type: &str, row_type: &st
     output.push_str("            None => Ok(None),\n");
     output.push_str("        }\n");
     output.push_str("    }\n");
+    output.push_str("    /// Return up to `max_rows` typed rows from this iterator.\n");
+    output.push_str(
+        "    ///\n    /// **Performance note:** each chunk is materialized as a `Vec`; choose a\n",
+    );
+    output.push_str("    /// chunk size that balances memory use against backend call overhead.\n");
     output.push_str(&format!(
         "    pub fn next_chunk(&mut self, max_rows: usize) -> Result<Vec<{row_type}>, SouffleError> {{\n"
     ));

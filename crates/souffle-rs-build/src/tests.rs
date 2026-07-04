@@ -1210,6 +1210,10 @@ fn compile_runs_souffle_generation_and_writes_metadata() {
     assert!(typed_api.contains(
         "pub fn next_chunk(&mut self, max_rows: usize) -> Result<Vec<OutputRow>, SouffleError>"
     ));
+    assert!(typed_api.contains("**Recommended for large relations:**"));
+    assert!(
+        typed_api.contains("**Performance note:** this collects the whole relation into a `Vec`")
+    );
     assert!(typed_api.contains(".next_chunk(max_rows)?"));
     assert!(typed_api.contains("pub struct InputRelation"));
     assert!(typed_api.contains("pub fn handle() -> RelationHandle"));

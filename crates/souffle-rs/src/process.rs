@@ -33,6 +33,12 @@ const PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(10);
 /// with `-F`, `-D`, and `-j`, then streams printable relations from
 /// `<work_dir>/output`.
 ///
+/// **Performance note:** this backend intentionally pays file IO, process
+/// startup, and text fact/CSV parsing costs for isolation and inspectability.
+/// It is useful for parity and debugging, but embedded or future batch APIs are
+/// better fits for high-throughput ingestion. Prefer [`Program::iter_relation`]
+/// over [`Program::read_relation`] when reading large process outputs.
+///
 /// # Example
 ///
 /// ```no_run
@@ -72,7 +78,8 @@ const PROCESS_POLL_INTERVAL: Duration = Duration::from_millis(10);
 ///
 /// program.insert_row("Edge", [Value::Symbol("a".into()), Value::Symbol("b".into())])?;
 /// program.run()?;
-/// let _reachable = program.read_relation("Reachable")?;
+/// let mut reachable = program.iter_relation("Reachable")?;
+/// let _first = reachable.next_row()?;
 /// # Ok(())
 /// # }
 /// ```

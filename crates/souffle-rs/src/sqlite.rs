@@ -18,6 +18,10 @@ const FORMAT_VERSION: u32 = 1;
 /// SQLite-backed relation store used for explicit export, debugging,
 /// interoperability, and backend parity.
 ///
+/// **Performance note:** exports use a transaction and prepared insert
+/// statement, but loading exported relations back with
+/// [`SqliteRelationStore::load_outputs`] materializes rows into memory.
+///
 /// # Example
 ///
 /// ```
@@ -65,6 +69,10 @@ impl SqliteRelationStore {
     }
 
     /// Export selected printable relations from a program into SQLite.
+    ///
+    /// **Recommended for large relation exports:** this streams rows from
+    /// [`Program::iter_relation`] inside one SQLite transaction instead of
+    /// calling [`Program::read_relation`].
     pub fn export_outputs<P, S>(
         &self,
         program: &P,
@@ -135,6 +143,10 @@ impl SqliteRelationStore {
     }
 
     /// Load all relation outputs from the store.
+    ///
+    /// **Performance note:** this materializes every stored relation into
+    /// memory. Use a [`SqliteProgram`] plus [`Program::iter_relation`] when
+    /// inspecting large exported relations incrementally.
     pub fn load_outputs(&self) -> Result<Vec<RelationOutput>, SouffleError> {
         self.load_artifacts()?
             .iter()
@@ -276,6 +288,13 @@ impl SqliteRelationStore {
 /// facades while storing relation rows in an explicit SQLite database. It is
 /// useful for parity, large intermediate relation inspection, and workflows
 /// that need durable relation artifacts without Souffle fact/output files.
+///
+/// **Performance note:** [`Program::insert_row`] on this backend reads the
+/// current relation rows and rewrites the SQLite relation for every inserted
+/// row. [`Program::iter_relation`] avoids whole-relation materialization, but
+/// the current SQLite iterator performs one indexed query per row. For large
+/// setup, prefer [`SqliteProgram::replace_relation_rows`] or streaming export
+/// through [`SqliteRelationStore::export_outputs`].
 ///
 /// # Example
 ///

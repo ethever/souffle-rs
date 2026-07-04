@@ -7,7 +7,7 @@
 //! # Example
 //!
 //! Build a schema-backed dynamic program facade, insert a loadable row, and
-//! read printable rows through the shared [`Program`] API:
+//! stream printable rows through the shared [`Program`] API:
 //!
 //! ```
 //! use souffle_rs::{
@@ -48,9 +48,12 @@
 //! )?;
 //! program.run()?;
 //!
-//! let output = program.read_relation("Output")?;
+//! let mut output = program.iter_relation("Output")?;
 //! assert_eq!(output.schema().name(), "Output");
-//! assert_eq!(output.rows().len(), 1);
+//! assert_eq!(output.next_row()?.unwrap().values(), &[
+//!     Value::Number(1),
+//!     Value::Symbol("entry".into()),
+//! ]);
 //! # Ok(())
 //! # }
 //! ```
