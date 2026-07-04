@@ -707,6 +707,11 @@ impl Build {
     }
 
     /// Override the deterministic output root.
+    ///
+    /// The [`Build::new`] default is `target/souffle-rs`, which is useful for
+    /// standalone tooling and side-effect-free planning. Cargo `build.rs`
+    /// integrations should usually prefer [`Build::out_dir_from_cargo_env`] so
+    /// generated files are scoped to Cargo's per-package build output.
     pub fn out_dir(mut self, path: impl Into<PathBuf>) -> Self {
         self.out_dir = path.into();
         self
@@ -715,9 +720,12 @@ impl Build {
     /// Use Cargo's build-script output directory for generated artifacts.
     ///
     /// This is the recommended output configuration for `build.rs`
-    /// integrations. It keeps generated C++, Rust, schema, native libraries,
-    /// and metadata under Cargo's build-script output root without requiring
-    /// application build scripts to name the internal directory layout.
+    /// integrations. It replaces the [`Build::new`] default output root with a
+    /// crate-owned location under Cargo's build-script output root. The exact
+    /// generated directory layout is intentionally private; application code
+    /// should use returned [`BuildMetadata`] paths and
+    /// `souffle_rs::include_generated_programs!()` rather than naming generated
+    /// files directly.
     pub fn out_dir_from_cargo_env(mut self) -> Result<Self, BuildError> {
         self.out_dir = cargo_build_output_root()?;
         Ok(self)
