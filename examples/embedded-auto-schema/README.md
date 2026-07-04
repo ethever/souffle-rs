@@ -8,8 +8,9 @@ without a hand-written schema bundle:
 3. Souffle generates C++ and transformed AST schema metadata.
 4. The build helper emits schema JSON, the C ABI wrapper, and typed Rust API.
 5. Cargo compiles the generated C++ into a native library.
-6. `src/main.rs` loads the generated schema JSON, creates `EmbeddedProgram`,
-   and uses the generated typed API.
+6. `src/main.rs` uses `souffle_rs::include_generated_programs!()`, creates
+   `EmbeddedProgram` from the generated `schema_bundle()`, and uses the
+   generated typed API.
 
 It is not a default workspace member because it requires Souffle headers and a
 C++ compiler during Cargo's build-script phase.

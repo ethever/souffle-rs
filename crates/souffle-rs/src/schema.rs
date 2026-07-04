@@ -1176,6 +1176,42 @@ impl RelationBundle {
         Self::default()
     }
 
+    /// Deserialize and validate a relation bundle from JSON.
+    ///
+    /// This is the runtime counterpart for schema JSON emitted by
+    /// `souffle-rs-build` generated typed APIs. It keeps JSON parsing behind
+    /// the `souffle-rs` public API, so crates using generated APIs do not need
+    /// to depend on `serde_json` directly.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use souffle_rs::{
+    ///     AttributeSchema, RelationBundle, RelationId, RelationSchema, TypeRef,
+    /// };
+    ///
+    /// let schema = RelationBundle::from_json_str(
+    ///     r#"{"Input":{"id":0,"name":"Input","kind":"input","attributes":[{"name":"id","declared_type":"number","runtime_types":["number"]}],"loadable":true,"printable":false}}"#,
+    /// )
+    /// .unwrap();
+    ///
+    /// assert_eq!(schema.get("Input").unwrap().id(), RelationId::new(0));
+    /// assert_eq!(
+    ///     schema.get("Input").unwrap().attributes(),
+    ///     &[AttributeSchema::new("id", TypeRef::Number)]
+    /// );
+    /// ```
+    pub fn from_json_str(json: &str) -> Result<Self, SouffleError> {
+        let schema = serde_json::from_str::<Self>(json).map_err(|source| {
+            SouffleError::ArtifactDecodeFailed {
+                artifact: "relation schema JSON".to_owned(),
+                message: source.to_string(),
+            }
+        })?;
+        schema.validate()?;
+        Ok(schema)
+    }
+
     /// Add or replace one relation schema.
     pub fn insert(&mut self, relation: RelationSchema) -> Option<RelationSchema> {
         self.relations.insert(relation.name().to_owned(), relation)

@@ -1,7 +1,7 @@
 use std::{
     env,
     error::Error,
-    fs, io,
+    io,
     path::{Path, PathBuf},
 };
 
@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
     })?;
 
-    let build_metadata = Build::new()
+    Build::new()
         .program("reachability", &logic_path)
         .souffle_bin(&souffle_bin)
         .souffle_include(&souffle_include)
@@ -47,23 +47,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         .emit_cxx_wrapper(true)
         .emit_schema(true)
         .emit_typed_api(true)
+        .emit_typed_api_module(true)
         .schema_bundle("reachability", schema::reachability_schema())
         .compile_native(true)
         .compile()?;
-
-    let typed_api = build_metadata.programs[0]
-        .typed_api_artifact
-        .as_ref()
-        .expect("typed API was requested");
-    // The generated typed API is a Rust module file with inner attributes.
-    // Load it through a small module shim instead of text-including it directly.
-    fs::write(
-        out_dir.join("rust/reachability_mod.rs"),
-        format!(
-            "#[allow(clippy::needless_lifetimes)]\n#[path = \"{}\"]\npub mod reachability;\n",
-            typed_api.display().to_string().escape_default()
-        ),
-    )?;
     Ok(())
 }
 

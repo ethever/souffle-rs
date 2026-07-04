@@ -684,9 +684,12 @@ impl Build {
     /// Configure emission of a generated Rust module index for all typed API
     /// artifacts.
     ///
-    /// The module index is emitted as `rust/mod.rs` under the output root and
-    /// is intended to be loaded with a Rust `#[path = "..."] mod ...;`
-    /// declaration. Enabling it also enables per-program typed API emission.
+    /// The module index is emitted as `rust/mod.rs` under the output root.
+    /// During [`Build::compile`], its path is also exposed through Cargo's
+    /// `SOUFFLE_RS_TYPED_API_MODULE` compile-time environment variable so the
+    /// runtime crate's `souffle_rs::include_generated_programs!()` macro can
+    /// load it without application code naming generated files. Enabling this
+    /// also enables per-program typed API emission.
     pub fn emit_typed_api_module(mut self, emit: bool) -> Self {
         self.emit_typed_api_module = emit;
         if emit {
@@ -1018,6 +1021,12 @@ impl Build {
 
         directives.push(CargoDirective::RerunIfEnvChanged("SOUFFLE".to_owned()));
         directives.push(CargoDirective::RerunIfEnvChanged("OUT_DIR".to_owned()));
+        if self.emit_typed_api_module {
+            directives.push(CargoDirective::RustcEnv {
+                key: "SOUFFLE_RS_TYPED_API_MODULE".to_owned(),
+                value: absolute_path_string(&self.typed_api_module_artifact()),
+            });
+        }
         let target = self.effective_target_triple();
         for name in native_compiler_env_vars(target.as_deref()) {
             push_unique_directive(&mut directives, CargoDirective::RerunIfEnvChanged(name));
@@ -1385,6 +1394,17 @@ fn require_namespace_value(value: &str, field: &'static str) -> Result<(), Build
 
 fn is_watchable_tool_path(path: &Path) -> bool {
     path.is_absolute() || path.components().count() > 1
+}
+
+fn absolute_path_string(path: &Path) -> String {
+    let path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(path)
+    };
+    path.display().to_string()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

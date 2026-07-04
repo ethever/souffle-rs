@@ -369,6 +369,20 @@ fn schema_exposes_normalized_runtime_value_types() {
 }
 
 #[test]
+fn relation_bundle_from_json_str_validates_decoded_schema() {
+    let schema = sample_schema();
+    let json = serde_json::to_string(&schema).unwrap();
+
+    let decoded = RelationBundle::from_json_str(&json).unwrap();
+
+    assert_eq!(decoded, schema);
+
+    let invalid_json = r#"{"Input":{"id":0,"name":"Input","kind":"input","attributes":[{"name":"choice","declared_type":{"adt":{"name":"Choice","variants":{"Some":["number"]},"variant_order":[],"is_enum":false}},"runtime_types":["adt"]}],"loadable":true,"printable":false}}"#;
+    let error = RelationBundle::from_json_str(invalid_json).unwrap_err();
+    assert!(matches!(error, SouffleError::SchemaValidation { .. }));
+}
+
+#[test]
 fn schema_preserves_declared_identity_for_typed_subtypes_and_unions() {
     let small = TypeRef::Subtype {
         name: "Small".to_owned(),

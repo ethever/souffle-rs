@@ -7,7 +7,9 @@ This is an opt-in standalone package that demonstrates the full embedded flow:
 3. Souffle generates C++ and schema metadata.
 4. The C ABI wrapper and typed Rust API are emitted.
 5. The generated C++ is compiled into a native library.
-6. `src/main.rs` uses `EmbeddedProgram` and the generated typed API.
+6. `src/main.rs` uses `souffle_rs::include_generated_programs!()`,
+   `EmbeddedProgram`, the generated `schema_bundle()`, and the generated typed
+   API.
 
 It is not a default workspace member because it requires Souffle headers and a
 C++ compiler during Cargo's build-script phase.

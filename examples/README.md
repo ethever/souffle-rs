@@ -65,7 +65,9 @@ That package demonstrates the standard Cargo integration path:
 3. Souffle emits generated C++ and schema metadata.
 4. The build helper emits the C ABI wrapper and typed Rust API.
 5. Cargo compiles the generated C++ into a native library.
-6. `src/main.rs` uses `EmbeddedProgram` and the generated typed API.
+6. `src/main.rs` uses `souffle_rs::include_generated_programs!()`,
+   `EmbeddedProgram`, the generated `schema_bundle()`, and the generated typed
+   API.
 
 Run the embedded build-script flow with automatically extracted schema metadata:
 
@@ -76,8 +78,8 @@ cargo run --manifest-path examples/embedded-auto-schema/Cargo.toml
 That package demonstrates the same standard Cargo integration path without a
 hand-written `.schema_bundle(...)`. `build.rs` extracts schema metadata from
 Souffle, emits schema JSON and typed Rust API, compiles the generated C++ into a
-native library, and `src/main.rs` loads the generated schema JSON before using
-the generated typed API.
+native library, and `src/main.rs` uses the generated `schema_bundle()` before
+using the generated typed API.
 
 Set `SOUFFLE_RS_SOUFFLE_BIN` and `SOUFFLE_RS_SOUFFLE_INCLUDE` when Souffle is
 installed outside `PATH` or its headers are not under the same installation

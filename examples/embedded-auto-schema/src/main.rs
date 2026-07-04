@@ -4,31 +4,20 @@
 //! The `build.rs` in this package does not pass a hand-written
 //! `RelationBundle`. It extracts schema from Souffle metadata, emits schema JSON
 //! and typed Rust API, builds the generated C++ into a native library, and makes
-//! both generated artifacts available through Cargo's deterministic `OUT_DIR`.
+//! the generated typed API available through
+//! `souffle_rs::include_generated_programs!()`.
 
 mod generated {
-    // `build.rs` writes this shim; it declares `pub mod reachability` with a
-    // `#[path = ".../reachability.rs"]` attribute pointing at the generated API.
-    include!(concat!(
-        env!("OUT_DIR"),
-        "/souffle-rs/rust/reachability_mod.rs"
-    ));
+    souffle_rs::include_generated_programs!();
 }
 
-use souffle_rs::{EmbeddedProgram, Program, RelationBundle};
+use souffle_rs::{EmbeddedProgram, Program};
 
 use generated::reachability;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let schema_json = include_str!(concat!(
-        env!("OUT_DIR"),
-        "/souffle-rs/schema/reachability.json"
-    ));
-    let schema: RelationBundle = serde_json::from_str(schema_json)?;
-    schema.validate()?;
-
-    let mut program = EmbeddedProgram::builder("reachability")
-        .schema(schema)
+    let mut program = EmbeddedProgram::builder(reachability::PROGRAM_NAME)
+        .schema(reachability::schema_bundle()?)
         .build_embedded()?;
 
     reachability::SeedRelation::insert(

@@ -266,6 +266,20 @@ fn multiple_programs_keep_distinct_namespaces_and_artifacts() {
             .generated_files
             .contains(&PathBuf::from("target/souffle-rs/rust/mod.rs"))
     );
+
+    let module_plan = build.plan().unwrap();
+    assert!(
+        module_plan
+            .cargo_directives()
+            .contains(&CargoDirective::RustcEnv {
+                key: "SOUFFLE_RS_TYPED_API_MODULE".to_owned(),
+                value: std::env::current_dir()
+                    .unwrap()
+                    .join("target/souffle-rs/rust/mod.rs")
+                    .display()
+                    .to_string(),
+            })
+    );
 }
 
 #[test]
@@ -1068,6 +1082,10 @@ fn compile_runs_souffle_generation_and_writes_metadata() {
     let typed_api = fs::read_to_string(&typed_api_path).unwrap();
     assert_generated_rust_compiles(&typed_api_path);
     assert!(typed_api.contains("pub struct InputRow"));
+    assert!(typed_api.contains("pub const PROGRAM_NAME: &str = \"analysis\""));
+    assert!(typed_api.contains("pub fn schema_json() -> &'static str"));
+    assert!(typed_api.contains("pub fn schema_bundle() -> Result<RelationBundle, SouffleError>"));
+    assert!(typed_api.contains("RelationBundle::from_json_str(schema_json())"));
     assert!(typed_api.contains("pub id: i64"));
     assert!(typed_api.contains("pub label: String"));
     assert!(typed_api.contains("impl TryFrom<Row> for InputRow"));
@@ -1209,9 +1227,9 @@ fn compile_emits_typed_api_module_index_for_multiple_programs() {
     assert!(metadata.generated_files.contains(&module_path));
 
     let module = fs::read_to_string(&module_path).unwrap();
-    assert!(module.contains("#[path = \"analysis.rs\"]"));
+    assert!(module.contains(&format!("#[path = \"{}\"]", analysis_api.display())));
     assert!(module.contains("pub mod analysis;"));
-    assert!(module.contains("#[path = \"summary.rs\"]"));
+    assert!(module.contains(&format!("#[path = \"{}\"]", summary_api.display())));
     assert!(module.contains("pub mod summary;"));
     assert!(module.contains("pub const PROGRAM_MODULES: &[(&str, &str, &str)]"));
     assert!(module.contains("(\"analysis\", \"analysis\", \"analysis_ns\")"));
@@ -1404,6 +1422,7 @@ fn compile_extracts_schema_artifacts_from_transformed_ast() {
     let typed_api = fs::read_to_string(&typed_api_path).unwrap();
     assert_generated_rust_compiles(&typed_api_path);
     assert!(typed_api.contains("pub struct InputPayload"));
+    assert!(typed_api.contains("pub fn schema_bundle() -> Result<RelationBundle, SouffleError>"));
     assert!(typed_api.contains("Add(Value, Value)"));
     assert!(typed_api.contains("pub field_0: u64"));
     assert!(typed_api.contains("pub field_1: f64"));

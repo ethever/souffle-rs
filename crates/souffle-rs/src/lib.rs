@@ -87,5 +87,31 @@ pub use schema::{
 pub use sqlite::{SqliteProgram, SqliteRelationArtifact, SqliteRelationStore};
 pub use value::{Row, Value, ValueKind};
 
+/// Include the generated typed API module index emitted by `souffle-rs-build`.
+///
+/// This macro is intended for crates whose `build.rs` calls
+/// `souffle_rs_build::Build::emit_typed_api_module(true)` and then
+/// `compile()`. The build helper publishes the generated module index path
+/// through Cargo's `SOUFFLE_RS_TYPED_API_MODULE` compile-time environment
+/// variable.
+///
+/// # Example
+///
+/// ```ignore
+/// mod generated {
+///     souffle_rs::include_generated_programs!();
+/// }
+///
+/// use generated::analysis;
+///
+/// let schema = analysis::schema_bundle()?;
+/// ```
+#[macro_export]
+macro_rules! include_generated_programs {
+    () => {
+        include!(env!("SOUFFLE_RS_TYPED_API_MODULE"));
+    };
+}
+
 #[cfg(test)]
 mod tests;

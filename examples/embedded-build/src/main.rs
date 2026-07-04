@@ -2,27 +2,20 @@
 //!
 //! The `build.rs` in this package compiles `logic/reachability.dl`, emits the
 //! C ABI wrapper and typed Rust API, builds the generated C++ into a native
-//! library, and makes the generated typed API available through Cargo's
-//! deterministic `OUT_DIR`.
+//! library, and exposes the generated typed API through
+//! `souffle_rs::include_generated_programs!()`.
 
 mod generated {
-    // `build.rs` writes this shim; it declares `pub mod reachability` with a
-    // `#[path = ".../reachability.rs"]` attribute pointing at the generated API.
-    include!(concat!(
-        env!("OUT_DIR"),
-        "/souffle-rs/rust/reachability_mod.rs"
-    ));
+    souffle_rs::include_generated_programs!();
 }
 
 use souffle_rs::{EmbeddedProgram, Program};
 
 use generated::reachability;
 
-mod schema;
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut program = EmbeddedProgram::builder("reachability")
-        .schema(schema::reachability_schema())
+    let mut program = EmbeddedProgram::builder(reachability::PROGRAM_NAME)
+        .schema(reachability::schema_bundle()?)
         .build_embedded()?;
 
     reachability::SeedRelation::insert(
