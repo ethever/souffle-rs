@@ -11,6 +11,18 @@ Run the dynamic runtime API example:
 cargo run -p souffle-rs-example-dynamic-api
 ```
 
+Run a build-helper example that extracts schema metadata from Souffle instead
+of passing a hand-written `RelationBundle`. It reads
+`examples/auto-schema/logic/reachability.dl`, calls `Build::compile()` without
+`.schema_bundle(...)`, and prints the generated schema and typed API artifact
+paths:
+
+```bash
+cargo run -p souffle-rs-example-auto-schema
+```
+
+The auto-schema example requires Souffle on `PATH` or `SOUFFLE_RS_SOUFFLE_BIN`.
+
 Print the build-helper plan for a typed Souffle integration. This example reads
 `examples/build-plan/logic/reachability.dl`, builds a `Build` configuration, and
 prints the planned Souffle command, Cargo directives, and typed API artifact

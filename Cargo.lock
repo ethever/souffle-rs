@@ -280,6 +280,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "souffle-rs-example-auto-schema"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "souffle-rs",
+ "souffle-rs-build",
+]
+
+[[package]]
 name = "souffle-rs-example-build-plan"
 version = "0.1.0"
 dependencies = [

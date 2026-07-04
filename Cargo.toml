@@ -3,6 +3,7 @@ members = [
     "crates/souffle-rs",
     "crates/souffle-rs-build",
     "crates/souffle-rs-sys",
+    "examples/auto-schema",
     "examples/build-plan",
     "examples/dynamic-api",
     "examples/process-backend",

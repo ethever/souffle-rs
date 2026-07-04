@@ -1,0 +1,12 @@
+[package]
+name = "souffle-rs-example-auto-schema"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+serde_json = "1"
+souffle-rs = { path = "../../crates/souffle-rs" }
+souffle-rs-build = { path = "../../crates/souffle-rs-build" }
