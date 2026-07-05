@@ -8,7 +8,10 @@
 //! This crate currently supports exactly Souffle [`SUPPORTED_SOUFFLE_VERSION`],
 //! selected by the default `souffle-2-4-1` Cargo feature. [`Build::compile`]
 //! checks the configured `souffle` binary before schema extraction or code
-//! generation.
+//! generation. Crates that disable default features must enable exactly one
+//! supported `souffle-*` feature themselves, for example
+//! `features = ["souffle-2-4-1"]`; building with no supported version feature is
+//! intentionally a compile-time error.
 //!
 //! # Example
 //!

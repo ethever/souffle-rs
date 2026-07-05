@@ -204,52 +204,69 @@ Implemented fix:
 
 **Priority:** low
 
-The in-memory backend exposes constructors that panic on invalid schema even
-though fallible alternatives exist.
+**Status:** fixed.
+
+The in-memory backend previously exposed constructors that could panic on
+invalid schema even though fallible alternatives existed.
 
 Evidence:
 
-- [`ProgramBuilder::build_memory()` calls `expect()`](../crates/souffle-rs/src/program.rs#L495).
-- [`InMemoryProgram::new()` calls `expect()`](../crates/souffle-rs/src/program.rs#L583).
+- [`ProgramBuilder::build_memory()` now returns `Result<InMemoryProgram, SouffleError>`](../crates/souffle-rs/src/program.rs).
+- [`InMemoryProgram::new()` now returns `Result<Self, SouffleError>` after schema validation](../crates/souffle-rs/src/program.rs).
+- Regression tests cover both public constructors returning typed schema errors
+  without panicking:
+  [`build_memory_returns_schema_error_without_panicking`](../crates/souffle-rs/src/tests.rs)
+  and
+  [`in_memory_new_returns_schema_error_without_panicking`](../crates/souffle-rs/src/tests.rs).
 
-Impact:
+Impact before fix:
 
 - Hand-written schema is a supported user path, so invalid schema can panic in
   public API code instead of returning a typed error.
 
-Suggested fix:
+Implemented fix:
 
-- Prefer documenting `try_build_memory()` and `try_new()` as primary APIs.
-- Consider deprecating the panic constructors or renaming them to make the panic
-  contract explicit.
+- Make the public memory constructors fallible instead of panic-based.
+- Keep `try_build_memory()` and `try_new()` as aliases for callers that prefer
+  explicitly fallible names.
+- Update examples and rustdoc to propagate memory constructor errors.
 
 ## Subtype Hierarchy Extraction
 
 **Priority:** low
 
-Automatic schema extraction records only subtype definitions whose base is a
-primitive type. Souffle accepts subtype chains such as `.type B <: A`, but the
-extractor loses that hierarchy.
+**Status:** fixed.
+
+Automatic schema extraction previously recorded only subtype definitions whose
+base was a primitive type. Souffle accepts subtype chains such as
+`.type B <: A`, but the extractor lost that hierarchy.
 
 Evidence:
 
-- [`type_definitions()` inserts subtypes only when the base is primitive](../crates/souffle-rs-build/src/schema_extract.rs#L178).
-- [`declared_scalar_type()` falls back to `TypeRef::Declared` when the subtype is missing](../crates/souffle-rs-build/src/schema_extract.rs#L568).
+- [`type_definitions()` stores subtype bases by name](../crates/souffle-rs-build/src/schema_extract.rs).
+- [`subtype_type_ref()` resolves subtype chains recursively with cycle detection](../crates/souffle-rs-build/src/schema_extract.rs).
+- [`compile_extracts_schema_artifacts_from_transformed_ast`](../crates/souffle-rs-build/src/tests.rs)
+  covers `.type Tiny <: Small` and asserts the extracted `TypeRef::Subtype`
+  chain.
 
-Impact:
+Impact before fix:
 
 - Runtime kind remains usable, but schema introspection loses the declared
   subtype chain.
 
-Suggested fix:
+Implemented fix:
 
-- Store subtype bases by name as well as primitive runtime bases.
-- Resolve subtype chains recursively with cycle detection.
-- Add extraction tests for subtype-of-subtype programs.
+- Store subtype bases by declared name instead of dropping non-primitive bases.
+- Resolve subtype chains recursively when relation attributes reference the
+  subtype.
+- Return a schema extraction error for recursive subtype chains or unsupported
+  subtype bases.
 
 ## Large Relation Performance Limits
 
 **Priority:** low
+
+**Status:** documented with current API guidance.
 
 Large relation support depends on callers choosing streaming APIs and avoiding
 debug/export backends for bulk insertion.
@@ -264,6 +281,12 @@ Evidence:
   [`EmbeddedProgram::insert_row`](../crates/souffle-rs/src/embedded.rs#L195).
 - Embedded iterator chunks materialize up to `max_rows` rows. See
   [`materialize_iterator_chunk`](../crates/souffle-rs-build/src/artifacts/cxx_wrapper.rs#L1194).
+- Runtime rustdoc now recommends `iter_relation()`, `next_row()`, and
+  `next_chunk()` for large outputs, and generated typed API rustdoc recommends
+  `iter_typed()` over `read()`.
+- [`README.md`](../README.md#large-relations) documents the current memory and
+  performance limits and identifies batch embedded input and chunked SQLite
+  cursors as future work.
 
 Impact:
 
@@ -272,16 +295,22 @@ Impact:
   inputs.
 - Embedded throughput is still bounded by per-row encoding and FFI calls.
 
-Suggested fix:
+Implemented guidance:
 
 - Keep rustdoc guidance focused on `iter_relation()`, `next_row()`, and
   `next_chunk()` for large outputs.
-- Add batch insert APIs for embedded input paths.
-- Add chunked SQLite output queries or a held cursor/prepared statement.
+- Document that `read_relation()` and generated typed `read()` materialize the
+  complete output relation.
+- Document that file/SQLite `insert_row()` are convenience paths, not bulk
+  ingestion APIs.
+- Track batch insert APIs for embedded input paths and chunked SQLite
+  output queries or held cursors as future performance work.
 
 ## Version Feature Compatibility
 
 **Priority:** low
+
+**Status:** documented.
 
 `souffle-rs-build` intentionally requires an exact supported Souffle version
 feature. Building it with `--no-default-features` fails at compile time.
@@ -291,6 +320,10 @@ Evidence:
 - [`compile_error!` requires `souffle-2-4-1`](../crates/souffle-rs-build/src/config.rs#L29).
 - The default feature enables the supported version in
   [`crates/souffle-rs-build/Cargo.toml`](../crates/souffle-rs-build/Cargo.toml#L9).
+- [`README.md`](../README.md) documents the `default-features = false` case and
+  the need to enable exactly one supported `souffle-*` feature.
+- The `souffle-rs-build` crate-level rustdoc documents the same exact-version
+  feature policy.
 
 Impact:
 
@@ -298,7 +331,7 @@ Impact:
   that blanket-disable default features may see a compile error instead of a
   normal optional dependency reduction.
 
-Suggested fix:
+Implemented guidance:
 
 - Keep the exact-version compile error if that remains the support policy.
 - Document that `souffle-rs-build` must be built with exactly one supported

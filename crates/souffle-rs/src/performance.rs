@@ -139,7 +139,7 @@ impl PerformanceMetrics {
 /// let mut program = InMemoryProgram::builder("analysis")
 ///     .cpu_budget(cpu_budget.clone())
 ///     .schema(schema)
-///     .build_memory();
+///     .build_memory()?;
 /// let mut recorder = PerformanceRecorder::new(Backend::Memory, &cpu_budget);
 ///
 /// recorder.measure_relation_insertion(|| program.insert_row("Input", [Value::Number(7)]))?;

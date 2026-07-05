@@ -44,7 +44,7 @@ const FORMAT_VERSION: u32 = 1;
 /// .collect();
 /// let mut program = InMemoryProgram::builder("analysis")
 ///     .schema(schema)
-///     .build_memory();
+///     .build_memory()?;
 /// program.replace_relation_rows("Output", [Row::new([Value::Number(7)])])?;
 ///
 /// let tempdir = tempfile::tempdir().expect("temporary export root");

@@ -133,7 +133,8 @@ impl Program for IteratorOnlyProgram {
 fn in_memory_program_validates_dynamic_rows() {
     let mut program = InMemoryProgram::builder("analysis")
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
 
     program
         .insert_row("Input", [Value::Number(1), Value::Symbol("entry".into())])
@@ -148,7 +149,8 @@ fn in_memory_program_validates_dynamic_rows() {
 fn build_info_exposes_schema_backend_and_abi_version() {
     let program = InMemoryProgram::builder("analysis")
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
 
     let build_info = program.build_info().unwrap();
 
@@ -168,7 +170,8 @@ fn performance_recorder_tracks_memory_backend_file_free_exchange() {
     let mut program = InMemoryProgram::builder("analysis")
         .cpu_budget(cpu_budget.clone())
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
     let mut recorder = PerformanceRecorder::new(program.backend(), &cpu_budget);
 
     recorder
@@ -413,7 +416,8 @@ fn schema_preserves_declared_identity_for_typed_subtypes_and_unions() {
     ]);
     let mut program = InMemoryProgram::builder("analysis")
         .schema(schema)
-        .build_memory();
+        .build_memory()
+        .unwrap();
 
     program
         .insert_row("SmallIn", [Value::Number(3)])
@@ -509,7 +513,8 @@ fn relation_handles_preserve_schema_identity_and_capabilities() {
 fn program_uses_relation_handles_for_dynamic_operations() {
     let mut program = InMemoryProgram::builder("analysis")
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
     let input = program.relation_handle("Input").unwrap();
     let output = program.relation_handle("Output").unwrap();
 
@@ -535,7 +540,8 @@ fn program_uses_relation_handles_for_dynamic_operations() {
 fn stale_relation_handle_reports_typed_mismatch() {
     let program = InMemoryProgram::builder("analysis")
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
     let stale = RelationHandle::new(
         RelationId::new(99),
         "Output",
@@ -1546,7 +1552,8 @@ fn embedded_scalar_output_decode_reports_kind_mismatch() {
 fn type_mismatch_preserves_relation_and_column() {
     let mut program = InMemoryProgram::builder("analysis")
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
 
     let error = program
         .insert_row("Input", [Value::Number(1), Value::Unsigned(2)])
@@ -1567,7 +1574,8 @@ fn type_mismatch_preserves_relation_and_column() {
 fn arity_mismatch_preserves_relation_context() {
     let mut program = InMemoryProgram::builder("analysis")
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
 
     let error = program.insert_row("Input", [Value::Number(1)]).unwrap_err();
 
@@ -1585,7 +1593,8 @@ fn arity_mismatch_preserves_relation_context() {
 fn output_iteration_requires_printable_relation() {
     let program = InMemoryProgram::builder("analysis")
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
 
     let error = program.iter_relation("Input").unwrap_err();
 
@@ -1601,7 +1610,8 @@ fn output_iteration_requires_printable_relation() {
 fn output_iteration_streams_schema_checked_rows() {
     let mut program = InMemoryProgram::builder("analysis")
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
 
     program
         .replace_relation_rows(
@@ -1629,7 +1639,8 @@ fn output_iteration_streams_schema_checked_rows() {
 fn output_iteration_streams_bounded_chunks() {
     let mut program = InMemoryProgram::builder("analysis")
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
     let expected_rows = vec![
         Row::new(vec![
             Value::Number(1),
@@ -1669,7 +1680,8 @@ fn adt_variant_errors_are_distinct_from_type_mismatch() {
     .collect();
     let mut program = InMemoryProgram::builder("analysis")
         .schema(schema)
-        .build_memory();
+        .build_memory()
+        .unwrap();
 
     let error = program
         .insert_row(
@@ -1722,7 +1734,8 @@ fn recursive_adt_references_validate_nested_values() {
     .collect();
     let mut program = InMemoryProgram::builder("analysis")
         .schema(schema)
-        .build_memory();
+        .build_memory()
+        .unwrap();
 
     program
         .insert_row(
@@ -1774,6 +1787,47 @@ fn recursive_adt_references_validate_nested_values() {
 
 #[test]
 fn schema_validation_rejects_adt_without_variant_order() {
+    let schema = invalid_adt_variant_order_schema();
+
+    let error = InMemoryProgram::builder("analysis")
+        .schema(schema)
+        .try_build_memory()
+        .unwrap_err();
+
+    assert_adt_variant_order_error(error);
+}
+
+#[test]
+fn build_memory_returns_schema_error_without_panicking() {
+    let schema = invalid_adt_variant_order_schema();
+
+    let result = std::panic::catch_unwind(move || {
+        InMemoryProgram::builder("analysis")
+            .schema(schema)
+            .build_memory()
+    });
+
+    let error = result
+        .expect("build_memory should return a typed error instead of panicking")
+        .unwrap_err();
+    assert_adt_variant_order_error(error);
+}
+
+#[test]
+fn in_memory_new_returns_schema_error_without_panicking() {
+    let schema = invalid_adt_variant_order_schema();
+
+    let result = std::panic::catch_unwind(move || {
+        InMemoryProgram::new(ProgramConfig::new("analysis"), schema)
+    });
+
+    let error = result
+        .expect("InMemoryProgram::new should return a typed error instead of panicking")
+        .unwrap_err();
+    assert_adt_variant_order_error(error);
+}
+
+fn invalid_adt_variant_order_schema() -> RelationBundle {
     let adt = TypeRef::Adt {
         name: "Choice".to_owned(),
         variants: [
@@ -1785,19 +1839,16 @@ fn schema_validation_rejects_adt_without_variant_order() {
         variant_order: Vec::new(),
         is_enum: false,
     };
-    let schema = [RelationSchema::input(
+    [RelationSchema::input(
         RelationId::new(0),
         "Input",
         [AttributeSchema::new("choice", adt)],
     )]
     .into_iter()
-    .collect();
+    .collect()
+}
 
-    let error = InMemoryProgram::builder("analysis")
-        .schema(schema)
-        .try_build_memory()
-        .unwrap_err();
-
+fn assert_adt_variant_order_error(error: SouffleError) {
     match error {
         SouffleError::SchemaValidation {
             relation,
@@ -1952,7 +2003,8 @@ fn run_options_keep_explicit_thread_count() {
     let mut program = InMemoryProgram::builder("analysis")
         .threads(NonZeroUsize::new(4).unwrap())
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
     let options = RunOptions::new(NonZeroUsize::new(8).unwrap());
 
     program.run_with_options(options.clone()).unwrap();
@@ -1968,7 +2020,8 @@ fn run_uses_configured_default_souffle_threads() {
             NonZeroUsize::new(4).unwrap(),
         ))
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
 
     program.run().unwrap();
 
@@ -2004,7 +2057,8 @@ fn cpu_budget_reports_typed_oversubscription() {
 fn file_relation_store_exports_manifest_schema_and_rows() {
     let mut program = InMemoryProgram::builder("analysis")
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
     let exact_nan = f64::from_bits(0x7ff8_0000_0000_0123);
     program
         .replace_relation_rows(
@@ -2211,7 +2265,8 @@ fn file_program_requires_store_configuration() {
 fn sqlite_relation_store_exports_schema_and_rows() {
     let mut program = InMemoryProgram::builder("analysis")
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
     let exact_nan = f64::from_bits(0x7ff8_0000_0000_0456);
     program
         .replace_relation_rows(
@@ -2440,10 +2495,12 @@ fn backend_parity_compares_float_values_by_bits() {
     let nan = f64::from_bits(0x7ff8_0000_0000_0123);
     let mut left = InMemoryProgram::builder("analysis")
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
     let mut right = InMemoryProgram::builder("analysis")
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
     let row = Row::new(vec![
         Value::Number(1),
         Value::Record(vec![Value::Unsigned(7), Value::Float(nan)]),
@@ -2477,10 +2534,12 @@ fn backend_parity_compares_iterators_without_read_relation() {
 fn backend_parity_reports_schema_normalized_value_mismatch() {
     let mut left = InMemoryProgram::builder("analysis")
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
     let mut right = InMemoryProgram::builder("analysis")
         .schema(sample_schema())
-        .build_memory();
+        .build_memory()
+        .unwrap();
 
     left.replace_relation_rows(
         "Output",

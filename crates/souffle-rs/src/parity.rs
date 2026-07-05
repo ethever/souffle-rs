@@ -24,10 +24,10 @@ use crate::{Backend, Program, RelationIterator, RelationSchema, Row, SouffleErro
 /// .collect();
 /// let mut left = InMemoryProgram::builder("left")
 ///     .schema(schema.clone())
-///     .build_memory();
+///     .build_memory()?;
 /// let mut right = InMemoryProgram::builder("right")
 ///     .schema(schema)
-///     .build_memory();
+///     .build_memory()?;
 ///
 /// left.replace_relation_rows("Output", [Row::new([Value::Number(7)])])?;
 /// right.replace_relation_rows("Output", [Row::new([Value::Number(7)])])?;

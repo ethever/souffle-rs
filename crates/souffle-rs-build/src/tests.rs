@@ -1559,6 +1559,24 @@ fn compile_extracts_schema_artifacts_from_transformed_ast() {
             .contains(&out_dir.join("rust/analysis.rs"))
     );
     let schema_json = fs::read_to_string(out_dir.join("schema/analysis.json")).unwrap();
+    let schema = RelationBundle::from_json_str(&schema_json).unwrap();
+    let tiny = schema
+        .get("Output")
+        .unwrap()
+        .attributes()
+        .iter()
+        .find(|attribute| attribute.name() == "tiny")
+        .unwrap();
+    assert_eq!(
+        tiny.declared_type(),
+        &TypeRef::Subtype {
+            name: "Tiny".to_owned(),
+            base: Box::new(TypeRef::Subtype {
+                name: "Small".to_owned(),
+                base: Box::new(TypeRef::Number),
+            }),
+        }
+    );
     assert!(schema_json.contains("\"Input\""));
     assert!(schema_json.contains("\"Trigger\""));
     assert!(schema_json.contains("\"Mid\""));
@@ -1596,8 +1614,10 @@ fn compile_extracts_schema_artifacts_from_transformed_ast() {
     assert!(typed_api.contains("Lit(i64)"));
     assert!(typed_api.contains("Name(String)"));
     assert!(typed_api.contains("pub small: i64"));
+    assert!(typed_api.contains("pub tiny: i64"));
     assert!(typed_api.contains("pub bucket: Value"));
     assert!(typed_api.contains("Value::typed(\"Small\""));
+    assert!(typed_api.contains("Value::typed(\"Tiny\""));
     assert!(typed_api.contains("let value = value.into_untyped();"));
     assert!(typed_api.contains("decode_value(\"Output\", \"bucket\", \"Bucket\""));
     assert!(typed_api.contains("pub values: Vec<i64>"));
@@ -1835,6 +1855,7 @@ if [ "${1:-}" = "--show=transformed-ast" ]; then
   esac
   cat <<'AST'
 .type Small <: number
+.type Tiny <: Small
 .type Large <: number
 .type Bucket = Small | Large
 .type Pair = [value:unsigned, weight:float]
@@ -1844,10 +1865,10 @@ if [ "${1:-}" = "--show=transformed-ast" ]; then
 .decl Input(id:number, label:symbol, payload:Pair)
 .decl Trigger()
 .decl Mid(payload:Pair, values:Numbers, choice:Expr, bucket:Bucket)
-.decl Output(id:number, label:symbol, payload:Pair, choice:Expr, small:Small, bucket:Bucket, values:Numbers, color:Color)
+.decl Output(id:number, label:symbol, payload:Pair, choice:Expr, small:Small, tiny:Tiny, bucket:Bucket, values:Numbers, color:Color)
 .input Input(IO="file",attributeNames="id	label	payload",fact-dir=".",name="Input",operation="input",params="{"records": {"Pair": {"arity": 2, "params": ["value", "weight"]}}, "relation": {"arity": 3, "params": ["id", "label", "payload"]}}",types="{"ADTs": {}, "records": {"r:Pair": {"arity": 2, "types": ["u:unsigned", "f:float"]}}, "relation": {"arity": 3, "types": ["i:number", "s:symbol", "r:Pair"]}}")
 .input Trigger(IO="file",attributeNames="",fact-dir=".",name="Trigger",operation="input",params="{"records": {}, "relation": {"arity": 0, "params": []}}",types="{"ADTs": {}, "records": {}, "relation": {"arity": 0, "types": []}}")
-.output Output(IO="file",attributeNames="id	label	payload	choice	small	bucket	values	color",name="Output",operation="output",output-dir=".",params="{"records": {"Numbers": {"arity": 2, "params": ["head", "tail"]}, "Pair": {"arity": 2, "params": ["value", "weight"]}}, "relation": {"arity": 8, "params": ["id", "label", "payload", "choice", "small", "bucket", "values", "color"]}}",types="{"ADTs": {"+:Expr": {"arity": 3, "branches": [{"name": "Lit", "types": ["i:number"]}, {"name": "Add", "types": ["+:Expr", "+:Expr"]}, {"name": "Name", "types": ["s:symbol"]}], "enum": false}, "+:Color": {"arity": 2, "branches": [{"name": "Green", "types": []}, {"name": "Red", "types": []}], "enum": true}}, "records": {"r:Numbers": {"arity": 2, "types": ["i:number", "r:Numbers"]}, "r:Pair": {"arity": 2, "types": ["u:unsigned", "f:float"]}}, "relation": {"arity": 8, "types": ["i:number", "s:symbol", "r:Pair", "+:Expr", "i:Small", "i:Bucket", "r:Numbers", "+:Color"]}}")
+.output Output(IO="file",attributeNames="id	label	payload	choice	small	tiny	bucket	values	color",name="Output",operation="output",output-dir=".",params="{"records": {"Numbers": {"arity": 2, "params": ["head", "tail"]}, "Pair": {"arity": 2, "params": ["value", "weight"]}}, "relation": {"arity": 9, "params": ["id", "label", "payload", "choice", "small", "tiny", "bucket", "values", "color"]}}",types="{"ADTs": {"+:Expr": {"arity": 3, "branches": [{"name": "Lit", "types": ["i:number"]}, {"name": "Add", "types": ["+:Expr", "+:Expr"]}, {"name": "Name", "types": ["s:symbol"]}], "enum": false}, "+:Color": {"arity": 2, "branches": [{"name": "Green", "types": []}, {"name": "Red", "types": []}], "enum": true}}, "records": {"r:Numbers": {"arity": 2, "types": ["i:number", "r:Numbers"]}, "r:Pair": {"arity": 2, "types": ["u:unsigned", "f:float"]}}, "relation": {"arity": 9, "types": ["i:number", "s:symbol", "r:Pair", "+:Expr", "i:Small", "i:Tiny", "i:Bucket", "r:Numbers", "+:Color"]}}")
 AST
   exit 0
 fi

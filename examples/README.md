@@ -6,7 +6,10 @@ normal CI. The embedded examples are intentionally opt-in because they need
 Souffle headers and a C++ compiler during Cargo's build-script phase.
 The build-helper examples currently require exactly Souffle `2.4.1`, selected
 by the default `souffle-rs-build` feature `souffle-2-4-1`; `Build::compile()`
-checks the configured `souffle` binary before generating artifacts.
+checks the configured `souffle` binary before generating artifacts. If you use
+`default-features = false` for `souffle-rs-build`, also enable exactly one
+supported `souffle-*` feature such as `souffle-2-4-1`; a build with no supported
+version feature intentionally fails at compile time.
 
 The main examples cover the schema/build integration matrix:
 
