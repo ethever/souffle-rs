@@ -40,7 +40,7 @@
 //!
 //! let mut program = InMemoryProgram::builder("analysis")
 //!     .schema(schema)
-//!     .build_memory();
+//!     .build_memory()?;
 //!
 //! program.insert_row("Input", [Value::Number(1), Value::Symbol("entry".into())])?;
 //! program.replace_relation_rows(

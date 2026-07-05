@@ -15,7 +15,7 @@ fn main() -> Result<(), souffle_rs::SouffleError> {
     let schema = reachability_schema();
     let mut program = InMemoryProgram::builder("reachability")
         .schema(schema)
-        .build_memory();
+        .build_memory()?;
 
     let edge = program.relation_handle("Edge")?;
     program.insert_row_by_handle(

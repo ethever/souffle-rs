@@ -32,15 +32,15 @@ identified in this pass.
 
 ## Low Priority
 
-- [ ] Public in-memory builder constructors can panic on invalid user-provided
+- [x] Public in-memory builder constructors can panic on invalid user-provided
       schema metadata.
       Details: [panic-based memory constructors](audit-todo-details.md#panic-based-memory-constructors).
-- [ ] Automatic schema extraction loses subtype-of-subtype hierarchy.
+- [x] Automatic schema extraction loses subtype-of-subtype hierarchy.
       Details: [subtype hierarchy extraction](audit-todo-details.md#subtype-hierarchy-extraction).
-- [ ] Large relation paths still have documented performance and memory limits
+- [x] Large relation paths still have documented performance and memory limits
       that should drive API guidance and future batching work.
       Details: [large relation performance limits](audit-todo-details.md#large-relation-performance-limits).
-- [ ] `souffle-rs-build` intentionally fails with `--no-default-features`; this
+- [x] `souffle-rs-build` intentionally fails with `--no-default-features`; this
       exact-version feature policy should stay explicit in user-facing docs.
       Details: [version feature compatibility](audit-todo-details.md#version-feature-compatibility).
 

@@ -56,7 +56,7 @@ use crate::{SqliteProgram, SqliteRelationStore};
 /// .collect();
 /// let mut program = InMemoryProgram::builder("analysis")
 ///     .schema(schema)
-///     .build_memory();
+///     .build_memory()?;
 ///
 /// program.insert_row("Input", [Value::Number(7)])?;
 /// program.replace_relation_rows("Output", [Row::new([Value::Number(7)])])?;
@@ -119,7 +119,7 @@ pub trait Program {
     /// .collect();
     /// let program = InMemoryProgram::builder("analysis")
     ///     .schema(schema)
-    ///     .build_memory();
+    ///     .build_memory()?;
     ///
     /// let input = program.relation_handle("Input")?;
     /// assert_eq!(input.name(), "Input");
@@ -151,7 +151,7 @@ pub trait Program {
     /// .collect();
     /// let program = InMemoryProgram::builder("analysis")
     ///     .schema(schema)
-    ///     .build_memory();
+    ///     .build_memory()?;
     /// let output = program.relation_handle("Output")?;
     ///
     /// assert_eq!(program.relation_schema_by_handle(&output)?.arity(), 1);
@@ -206,7 +206,7 @@ pub trait Program {
     /// .collect();
     /// let mut program = InMemoryProgram::builder("analysis")
     ///     .schema(schema)
-    ///     .build_memory();
+    ///     .build_memory()?;
     /// let input = program.relation_handle("Input")?;
     ///
     /// program.insert_row_by_handle(&input, [Value::Number(7)])?;
@@ -267,7 +267,7 @@ pub trait Program {
     /// .collect();
     /// let mut program = InMemoryProgram::builder("analysis")
     ///     .schema(schema)
-    ///     .build_memory();
+    ///     .build_memory()?;
     /// program.replace_relation_rows("Output", [Row::new([Value::Number(7)])])?;
     /// let output = program.relation_handle("Output")?;
     ///
@@ -325,7 +325,7 @@ pub trait Program {
     /// .collect();
     /// let mut program = InMemoryProgram::builder("analysis")
     ///     .schema(schema)
-    ///     .build_memory();
+    ///     .build_memory()?;
     /// program.replace_relation_rows("Output", [Row::new([Value::Number(7)])])?;
     /// let output = program.relation_handle("Output")?;
     ///
@@ -364,7 +364,8 @@ pub trait Program {
 /// let program = ProgramBuilder::new("analysis")
 ///     .backend(Backend::Memory)
 ///     .schema(schema)
-///     .build_memory();
+///     .build_memory()
+///     .unwrap();
 ///
 /// assert_eq!(program.name(), "analysis");
 /// assert_eq!(program.backend(), Backend::Memory);
@@ -451,7 +452,7 @@ impl ProgramBuilder {
     ///         NonZeroUsize::new(4).unwrap(),
     ///     ))
     ///     .schema(schema)
-    ///     .build_memory();
+    ///     .build_memory()?;
     ///
     /// program.run()?;
     /// assert_eq!(program.last_run_options().unwrap().threads().get(), 4);
@@ -490,21 +491,19 @@ impl ProgramBuilder {
         self
     }
 
-    /// Build an in-memory relation facade.
+    /// Build an in-memory relation facade after schema validation.
     #[cfg(feature = "memory")]
-    pub fn build_memory(self) -> InMemoryProgram {
-        self.try_build_memory()
-            .expect("invalid schema passed to ProgramBuilder::build_memory")
+    pub fn build_memory(self) -> Result<InMemoryProgram, SouffleError> {
+        InMemoryProgram::new(self.config.with_backend(Backend::Memory), self.schema)
     }
 
     /// Build an in-memory relation facade after schema validation.
+    ///
+    /// This is an alias for [`ProgramBuilder::build_memory`] kept for callers
+    /// that prefer an explicitly fallible method name.
     #[cfg(feature = "memory")]
     pub fn try_build_memory(self) -> Result<InMemoryProgram, SouffleError> {
-        self.schema.validate()?;
-        Ok(InMemoryProgram::new(
-            self.config.with_backend(Backend::Memory),
-            self.schema,
-        ))
+        self.build_memory()
     }
 
     /// Build an embedded generated-program facade.
@@ -579,13 +578,8 @@ pub struct InMemoryProgram {
 
 #[cfg(feature = "memory")]
 impl InMemoryProgram {
-    /// Create an in-memory program from explicit config and schema metadata.
-    pub fn new(config: ProgramConfig, schema: RelationBundle) -> Self {
-        Self::try_new(config, schema).expect("invalid schema passed to InMemoryProgram::new")
-    }
-
     /// Create an in-memory program from explicit config after schema validation.
-    pub fn try_new(config: ProgramConfig, schema: RelationBundle) -> Result<Self, SouffleError> {
+    pub fn new(config: ProgramConfig, schema: RelationBundle) -> Result<Self, SouffleError> {
         schema.validate()?;
         let relation_rows = schema
             .iter()
@@ -597,6 +591,14 @@ impl InMemoryProgram {
             relation_rows,
             last_run_options: None,
         })
+    }
+
+    /// Create an in-memory program from explicit config after schema validation.
+    ///
+    /// This is an alias for [`InMemoryProgram::new`] kept for callers that
+    /// prefer an explicitly fallible method name.
+    pub fn try_new(config: ProgramConfig, schema: RelationBundle) -> Result<Self, SouffleError> {
+        Self::new(config, schema)
     }
 
     /// Start building a named in-memory program.
@@ -783,7 +785,8 @@ impl RelationOutput {
 ///
 /// let mut program = InMemoryProgram::builder("analysis")
 ///     .schema(schema)
-///     .build_memory();
+///     .build_memory()
+///     .unwrap();
 /// program.replace_relation_rows("Output", [Row::new([Value::Number(7)])])?;
 ///
 /// let mut rows = program.iter_relation("Output")?;
@@ -813,7 +816,8 @@ impl RelationOutput {
 ///
 /// let mut program = InMemoryProgram::builder("analysis")
 ///     .schema(schema)
-///     .build_memory();
+///     .build_memory()
+///     .unwrap();
 ///
 /// let rows = program.iter_relation("Output").unwrap();
 /// program.run().unwrap();
@@ -898,7 +902,7 @@ impl<'program> RelationIterator<'program> {
     ///
     /// let mut program = InMemoryProgram::builder("analysis")
     ///     .schema(schema)
-    ///     .build_memory();
+    ///     .build_memory()?;
     /// program.replace_relation_rows(
     ///     "Output",
     ///     [

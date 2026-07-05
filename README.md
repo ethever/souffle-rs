@@ -72,7 +72,17 @@ discoverable from `PATH` and its install prefix.
 `souffle-rs-build` currently supports exactly Souffle `2.4.1`, selected by the
 default Cargo feature `souffle-2-4-1`. `Build::compile()` checks
 `souffle --version` before schema extraction or code generation and fails if the
-configured binary reports a different version.
+configured binary reports a different version. If your workspace disables
+default features, re-enable exactly one supported Souffle version feature, for
+example:
+
+```toml
+souffle-rs-build = { version = "0.1", default-features = false, features = ["souffle-2-4-1"] }
+```
+
+Building `souffle-rs-build` with `--no-default-features` and no `souffle-*`
+feature is intentionally a compile-time error, because generated C++ metadata
+and wrapper compatibility are version-specific.
 
 The safe runtime exposes backend-neutral `PerformanceRecorder` /
 `PerformanceMetrics` values for benchmark harnesses. The metrics record total
@@ -163,12 +173,11 @@ extractor reads Souffle's transformed AST output as text: relation `params` and
 `types` payloads are parsed as JSON, while surrounding `.decl`, `.input`,
 `.output`, and `.type` directives are discovered with line-oriented string
 matching and top-level delimiter splitting. That means the extractor can lag
-behind Souffle syntax and metadata formatting changes. A known current weakness
-is subtype hierarchy extraction: subtype declarations whose base is another
-declared subtype, such as `.type B <: A`, are not preserved as a subtype chain
-and fall back to a runtime-compatible declared type. For uncommon type syntax or
-schema-critical generated APIs, prefer a hand-written `RelationBundle` or add
-tests that assert the extracted schema shape you rely on.
+behind Souffle syntax and metadata formatting changes. Subtype chains such as
+`.type B <: A` are preserved in extracted schema metadata, but for uncommon type
+syntax or schema-critical generated APIs, prefer a hand-written
+`RelationBundle` or add tests that assert the extracted schema shape you rely
+on.
 
 ## Runtime usage
 
@@ -211,17 +220,32 @@ let schema: RelationBundle = [
 let mut program = InMemoryProgram::builder("analysis")
     .backend(Backend::Memory)
     .schema(schema)
-    .build_memory();
+    .build_memory()?;
 
 program.insert_row("Input", [Value::Number(7)])?;
 program.replace_relation_rows("Output", [Row::new([Value::Number(7)])])?;
 program.run()?;
 
-let output = program.read_relation("Output")?;
-assert_eq!(output.rows()[0].values(), &[Value::Number(7)]);
+let mut output = program.iter_relation("Output")?;
+assert_eq!(output.next_row()?.unwrap().values(), &[Value::Number(7)]);
 # Ok(())
 # }
 ```
+
+### Large relations
+
+Use streaming APIs for large outputs. `Program::read_relation()` and generated
+typed `read()` helpers collect the complete relation into a Rust `Vec`, so prefer
+`Program::iter_relation()`, generated `iter_typed()`, `RelationIterator::next_row()`,
+and `RelationIterator::next_chunk()` when output size is not bounded.
+
+`Program::insert_row()` is a convenience API, not a bulk ingestion API. The file
+and SQLite backends reload and rewrite relation storage for each inserted row,
+the SQLite iterator currently performs one indexed query per row, and the
+embedded backend still encodes and crosses the C ABI once per input row. For
+large fixtures or exports, prefer `replace_relation_rows()`, streaming export
+helpers, and embedded/process backends where appropriate. Batch embedded input
+and chunked SQLite cursors are future performance work, not current guarantees.
 
 Generated typed APIs wrap the same dynamic runtime core. A generated module can
 insert strongly typed input rows, stream typed output rows, and still share

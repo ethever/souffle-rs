@@ -51,7 +51,7 @@ struct AstAdtBranch {
 
 #[derive(Debug, Default)]
 struct TypeDefinitions {
-    subtypes: BTreeMap<String, TypeRef>,
+    subtypes: BTreeMap<String, String>,
     unions: BTreeMap<String, Vec<String>>,
     records: BTreeMap<String, Vec<DeclaredField>>,
     adts: BTreeMap<String, Vec<DeclaredAdtBranch>>,
@@ -194,8 +194,10 @@ fn type_definitions(ast: &str) -> TypeDefinitions {
         if let Some((name, base)) = rest.split_once("<:") {
             let name = name.trim();
             let base = base.trim();
-            if let Some(base) = primitive_type_name(base) {
-                definitions.subtypes.insert(name.to_owned(), base);
+            if !name.is_empty() && !base.is_empty() {
+                definitions
+                    .subtypes
+                    .insert(name.to_owned(), base.to_owned());
             }
             continue;
         }
@@ -571,11 +573,15 @@ fn declared_scalar_type(
     declared: &str,
     stack: &mut Vec<String>,
 ) -> Result<TypeRef, BuildError> {
-    if let Some(base) = context.definitions.subtypes.get(declared) {
-        return Ok(TypeRef::Subtype {
-            name: declared.to_owned(),
-            base: Box::new(base.clone()),
-        });
+    if let Some(subtype) = subtype_type_ref(
+        context.program,
+        context.relation,
+        context.column,
+        context.definitions,
+        declared,
+        stack,
+    )? {
+        return Ok(subtype);
     }
 
     if let Some(variants) = context.definitions.unions.get(declared) {
@@ -609,6 +615,51 @@ fn declared_scalar_type(
         name: declared.to_owned(),
         runtime: Box::new(runtime),
     })
+}
+
+fn subtype_type_ref(
+    program: &str,
+    relation: &str,
+    column: &str,
+    definitions: &TypeDefinitions,
+    declared: &str,
+    stack: &mut Vec<String>,
+) -> Result<Option<TypeRef>, BuildError> {
+    let Some(base_name) = definitions.subtypes.get(declared).cloned() else {
+        return Ok(None);
+    };
+
+    let marker = format!("subtype:{declared}");
+    if stack.iter().any(|entry| entry == &marker) {
+        return Err(schema_error(
+            program,
+            format!(
+                "relation `{relation}` column `{column}` uses recursive subtype type `{declared}`"
+            ),
+        ));
+    }
+
+    stack.push(marker);
+    let base = if let Some(primitive) = primitive_type_name(&base_name) {
+        Ok(primitive)
+    } else if let Some(subtype) =
+        subtype_type_ref(program, relation, column, definitions, &base_name, stack)?
+    {
+        Ok(subtype)
+    } else {
+        Err(schema_error(
+            program,
+            format!(
+                "relation `{relation}` column `{column}` subtype `{declared}` has unsupported base type `{base_name}`"
+            ),
+        ))
+    };
+    stack.pop();
+
+    Ok(Some(TypeRef::Subtype {
+        name: declared.to_owned(),
+        base: Box::new(base?),
+    }))
 }
 
 fn record_type(
@@ -741,11 +792,15 @@ fn declared_type_ref(
         return Ok(primitive);
     }
 
-    if let Some(base) = context.definitions.subtypes.get(declared) {
-        return Ok(TypeRef::Subtype {
-            name: declared.to_owned(),
-            base: Box::new(base.clone()),
-        });
+    if let Some(subtype) = subtype_type_ref(
+        context.program,
+        context.relation,
+        context.column,
+        context.definitions,
+        declared,
+        stack,
+    )? {
+        return Ok(subtype);
     }
 
     if let Some(variants) = context.definitions.unions.get(declared) {
