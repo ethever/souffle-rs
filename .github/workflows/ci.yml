@@ -112,6 +112,7 @@ jobs:
         run: |
           cargo run --manifest-path examples/embedded-build/Cargo.toml
           cargo run --manifest-path examples/embedded-auto-schema/Cargo.toml
+          cargo run --manifest-path examples/souffle-addon/Cargo.toml
 
   ffi-leak-check:
     name: ffi-buffer-leak-check

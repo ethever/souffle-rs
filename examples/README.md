@@ -19,6 +19,7 @@ The main examples cover the schema/build integration matrix:
 | Hand-written `RelationBundle` | Generated typed/native API | Yes | `embedded-build` |
 | Extracted from Souffle | Artifact export only | No | `auto-schema` |
 | Extracted from Souffle | Generated typed/native API | Yes | `embedded-auto-schema` |
+| Hand-written `RelationBundle` plus C++ addon | Generated typed/native API | Yes | `souffle-addon` |
 
 Run the dynamic runtime API example:
 
@@ -89,6 +90,16 @@ output API plus `BuildProfile::EmbeddedTypedApi`, extracts schema metadata from
 Souffle, emits schema JSON and typed Rust API, compiles the generated C++ into a
 native library, and `src/main.rs` uses the generated `schema_bundle()` before
 using the generated typed API.
+
+Run an embedded build-script flow that links a Souffle addon library:
+
+```bash
+cargo run --manifest-path examples/souffle-addon/Cargo.toml
+```
+
+That package compiles `native/number_addon.cpp` into a small dynamic library,
+passes it to Souffle through `FunctorLibrary`, and verifies that the generated
+embedded program can call `@plus_one(value)`.
 
 Set `SOUFFLE_RS_SOUFFLE_BIN` and `SOUFFLE_RS_SOUFFLE_INCLUDE` when supported
 Souffle is installed outside `PATH` or its headers are not under the same
