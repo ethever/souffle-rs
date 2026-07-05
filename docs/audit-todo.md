@@ -1,8 +1,8 @@
 # Audit TODO Outline
 
 This file tracks the short-form follow-up list from the July 2026 project audit.
-See [audit-todo-details.md](audit-todo-details.md) for evidence, impact, and
-suggested fixes.
+See [audit-todo-details.md](audit-todo-details.md) for evidence, impact,
+status, and suggested or implemented fixes.
 
 ## High Priority
 
@@ -11,13 +11,13 @@ identified in this pass.
 
 ## Medium Priority
 
-- [ ] Generated typed API can emit invalid Rust identifiers for non-rawable
+- [x] Generated typed API can emit invalid Rust identifiers for non-rawable
       keywords such as `self`, `crate`, `super`, and `Self`.
       Details: [generated Rust identifiers](audit-todo-details.md#generated-rust-identifiers).
-- [ ] Union/subtype runtime identity is ambiguous for variants with the same
+- [x] Union/subtype runtime identity is ambiguous for variants with the same
       Souffle ABI/runtime kind.
       Details: [union subtype identity](audit-todo-details.md#union-subtype-identity).
-- [ ] Process backend cleanup can delete pre-existing `facts/` or `output/`
+- [x] Process backend cleanup can delete pre-existing `facts/` or `output/`
       directories under a caller-provided work directory.
       Details: [process work directory cleanup](audit-todo-details.md#process-work-directory-cleanup).
 

@@ -427,6 +427,15 @@ fn schema_preserves_declared_identity_for_typed_subtypes_and_unions() {
     program
         .insert_row("BucketIn", [Value::typed("Bucket", Value::Number(11))])
         .expect("union accepts its own declared wrapper");
+    program
+        .insert_row(
+            "BucketIn",
+            [Value::typed(
+                "Bucket",
+                Value::typed("Large", Value::Number(12)),
+            )],
+        )
+        .expect("union accepts a nested explicitly typed variant");
 
     let error = program
         .insert_row("SmallIn", [Value::typed("Large", Value::Number(13))])
@@ -443,6 +452,25 @@ fn schema_preserves_declared_identity_for_typed_subtypes_and_unions() {
 
     let error = program
         .insert_row("BucketIn", [Value::typed("Other", Value::Number(17))])
+        .unwrap_err();
+    assert_eq!(
+        error,
+        SouffleError::TypeMismatch {
+            relation: "BucketIn".to_owned(),
+            column: "value".to_owned(),
+            expected: "Bucket".to_owned(),
+            actual: "Other".to_owned(),
+        }
+    );
+
+    let error = program
+        .insert_row(
+            "BucketIn",
+            [Value::typed(
+                "Bucket",
+                Value::typed("Other", Value::Number(19)),
+            )],
+        )
         .unwrap_err();
     assert_eq!(
         error,
@@ -621,6 +649,114 @@ printf "%s" "$threads" > "$output/threads.txt"
 
 #[cfg(unix)]
 #[test]
+fn process_backend_refuses_unmanaged_facts_directory() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let runner = tempdir.path().join("runner.sh");
+    write_executable_script(
+        &runner,
+        r#"#!/bin/sh
+exit 0
+"#,
+    );
+    let schema = RelationBundle::from_iter([
+        RelationSchema::input(
+            RelationId::new(0),
+            "Input",
+            [AttributeSchema::new("id", TypeRef::Number)],
+        ),
+        RelationSchema::output(
+            RelationId::new(1),
+            "Output",
+            [AttributeSchema::new("id", TypeRef::Number)],
+        ),
+    ]);
+    let work_dir = tempdir.path().join("work");
+    let facts_dir = work_dir.join("facts");
+    fs::create_dir_all(&facts_dir).unwrap();
+    fs::write(facts_dir.join("keep.txt"), "user data").unwrap();
+
+    let mut program = ProcessProgram::builder("analysis")
+        .schema(schema)
+        .process_config(ProcessConfig::new(&runner, &work_dir))
+        .build_process()
+        .unwrap();
+    program.insert_row("Input", [Value::Number(7)]).unwrap();
+
+    let error = program.run().unwrap_err();
+    match error {
+        SouffleError::FileIo {
+            operation,
+            path,
+            message,
+        } => {
+            assert_eq!(operation, "prepare directory");
+            assert_eq!(path, facts_dir.display().to_string());
+            assert!(message.contains("unmanaged process exchange directory"));
+        }
+        error => panic!("expected unmanaged facts directory failure, got {error:?}"),
+    }
+    assert_eq!(
+        fs::read_to_string(facts_dir.join("keep.txt")).unwrap(),
+        "user data"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn process_backend_refuses_unmanaged_output_directory() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let runner = tempdir.path().join("runner.sh");
+    write_executable_script(
+        &runner,
+        r#"#!/bin/sh
+exit 0
+"#,
+    );
+    let schema = RelationBundle::from_iter([
+        RelationSchema::input(
+            RelationId::new(0),
+            "Input",
+            [AttributeSchema::new("id", TypeRef::Number)],
+        ),
+        RelationSchema::output(
+            RelationId::new(1),
+            "Output",
+            [AttributeSchema::new("id", TypeRef::Number)],
+        ),
+    ]);
+    let work_dir = tempdir.path().join("work");
+    let output_dir = work_dir.join("output");
+    fs::create_dir_all(&output_dir).unwrap();
+    fs::write(output_dir.join("keep.txt"), "user data").unwrap();
+
+    let mut program = ProcessProgram::builder("analysis")
+        .schema(schema)
+        .process_config(ProcessConfig::new(&runner, &work_dir))
+        .build_process()
+        .unwrap();
+    program.insert_row("Input", [Value::Number(7)]).unwrap();
+
+    let error = program.run().unwrap_err();
+    match error {
+        SouffleError::FileIo {
+            operation,
+            path,
+            message,
+        } => {
+            assert_eq!(operation, "prepare directory");
+            assert_eq!(path, output_dir.display().to_string());
+            assert!(message.contains("unmanaged process exchange directory"));
+        }
+        error => panic!("expected unmanaged output directory failure, got {error:?}"),
+    }
+    assert_eq!(
+        fs::read_to_string(output_dir.join("keep.txt")).unwrap(),
+        "user data"
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn process_backend_rejects_fact_delimiter_symbols_on_insert() {
     let tempdir = tempfile::tempdir().unwrap();
     let runner = tempdir.path().join("runner.sh");
@@ -742,7 +878,10 @@ cat "$facts/InputSmall.facts" > "$output/BucketOut.csv"
     );
     assert_eq!(
         program.read_relation("BucketOut").unwrap().rows(),
-        &[Row::new([Value::typed("Bucket", Value::Number(7))])]
+        &[Row::new([Value::typed(
+            "Bucket",
+            Value::typed("Small", Value::Number(7))
+        )])]
     );
 }
 
@@ -1226,6 +1365,47 @@ fn embedded_typed_subtype_input_rows_encode_runtime_abi_values() {
 }
 
 #[test]
+fn embedded_union_input_rows_encode_selected_declared_type() {
+    let small = TypeRef::Subtype {
+        name: "Small".to_owned(),
+        base: Box::new(TypeRef::Number),
+    };
+    let large = TypeRef::Subtype {
+        name: "Large".to_owned(),
+        base: Box::new(TypeRef::Number),
+    };
+    let schema = RelationSchema::input(
+        RelationId::new(0),
+        "Input",
+        [AttributeSchema::new(
+            "value",
+            TypeRef::Union {
+                name: "Bucket".to_owned(),
+                variants: vec![small, large],
+            },
+        )],
+    );
+
+    let encoded = encode_input_row(
+        &schema,
+        &Row::new([Value::typed(
+            "Bucket",
+            Value::typed("Large", Value::Number(7)),
+        )]),
+    )
+    .unwrap();
+
+    assert_eq!(encoded.values()[0].kind, SouffleRsValueKind::Number);
+    assert_eq!(
+        borrowed_abi_string(encoded.values()[0].declared_type),
+        "Large"
+    );
+    unsafe {
+        assert_eq!(encoded.values()[0].as_.number, 7);
+    }
+}
+
+#[test]
 fn embedded_composite_input_rows_encode_borrowed_c_abi_arena() {
     let schema = RelationSchema::input(
         RelationId::new(0),
@@ -1284,10 +1464,20 @@ fn embedded_composite_input_rows_encode_borrowed_c_abi_arena() {
     assert_eq!(adt_values[0].kind, SouffleRsValueKind::Symbol);
 }
 
+fn borrowed_abi_string(value: SouffleRsString) -> String {
+    if value.len == 0 {
+        return String::new();
+    }
+    assert!(!value.data.is_null());
+    let bytes = unsafe { std::slice::from_raw_parts(value.data.cast::<u8>(), value.len) };
+    std::str::from_utf8(bytes).unwrap().to_owned()
+}
+
 #[test]
 fn embedded_scalar_output_decode_preserves_float_bits_and_symbols() {
     let raw_float = SouffleRsValue {
         kind: SouffleRsValueKind::Float,
+        declared_type: SouffleRsString::null(),
         as_: SouffleRsValueData {
             float_value: f64::from_bits(0x8000_0000_0000_0000),
         },
@@ -1295,6 +1485,7 @@ fn embedded_scalar_output_decode_preserves_float_bits_and_symbols() {
     let symbol = b"entry";
     let raw_symbol = SouffleRsValue {
         kind: SouffleRsValueKind::Symbol,
+        declared_type: SouffleRsString::null(),
         as_: SouffleRsValueData {
             symbol: SouffleRsString {
                 data: symbol.as_ptr().cast(),
@@ -1317,6 +1508,7 @@ fn embedded_scalar_output_decode_preserves_float_bits_and_symbols() {
 fn embedded_scalar_output_decode_preserves_subtype_wrapper() {
     let raw_value = SouffleRsValue {
         kind: SouffleRsValueKind::Number,
+        declared_type: SouffleRsString::null(),
         as_: SouffleRsValueData { number: 9 },
     };
     let small = TypeRef::Subtype {
@@ -1334,6 +1526,7 @@ fn embedded_scalar_output_decode_preserves_subtype_wrapper() {
 fn embedded_scalar_output_decode_reports_kind_mismatch() {
     let raw_value = SouffleRsValue {
         kind: SouffleRsValueKind::Unsigned,
+        declared_type: SouffleRsString::null(),
         as_: SouffleRsValueData { unsigned_value: 1 },
     };
 

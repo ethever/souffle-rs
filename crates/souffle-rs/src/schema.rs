@@ -771,6 +771,19 @@ impl TypeRef {
             Self::Union { name, variants } => {
                 if let Some(declared_type) = value.declared_type_name() {
                     if declared_type == name {
+                        if let Some(inner_declared_type) = typed_inner_declared_type_name(value) {
+                            let Some(variant) = variants.iter().find(|variant| {
+                                type_ref_declared_name(variant, definitions)
+                                    == Some(inner_declared_type)
+                            }) else {
+                                return TypeCheck::Mismatch {
+                                    expected: self.display_name(),
+                                    actual: inner_declared_type.to_owned(),
+                                };
+                            };
+                            return variant
+                                .accepts_value_with_definitions(untyped_value, definitions);
+                        }
                         return union_accepts_value(variants, untyped_value, definitions)
                             .unwrap_or_else(|| TypeCheck::Mismatch {
                                 expected: self.display_name(),
@@ -797,6 +810,13 @@ impl TypeRef {
                 })
             }
         }
+    }
+}
+
+fn typed_inner_declared_type_name(value: &Value) -> Option<&str> {
+    match value {
+        Value::Typed { value, .. } => value.declared_type_name(),
+        _ => None,
     }
 }
 

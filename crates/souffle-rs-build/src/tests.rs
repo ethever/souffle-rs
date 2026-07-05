@@ -764,7 +764,7 @@ fn metadata_records_reproducible_build_settings() {
     assert!(json.contains("\"wrapper_source\": \"native/wrapper.cpp\""));
     assert!(json.contains("\"program\": \"analysis\""));
     assert!(json.contains("\"install_name\": \"@rpath/libanalysis.dylib\""));
-    assert!(json.contains("\"abi_version\": 5"));
+    assert!(json.contains("\"abi_version\": 6"));
     let json_value: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(
         json_value["macros"]["PROJECT_DIR"],
@@ -1081,12 +1081,13 @@ fn compile_runs_souffle_generation_and_writes_metadata() {
     assert!(metadata_json.contains("native/souffle_rs_wrapper.cpp"));
 
     let c_header = fs::read_to_string(out_dir.join("include/souffle_rs.h")).unwrap();
-    assert!(c_header.contains("#define SOUFFLE_RS_ABI_VERSION 5u"));
+    assert!(c_header.contains("#define SOUFFLE_RS_ABI_VERSION 6u"));
     assert!(c_header.contains("typedef struct SouffleRsProgram SouffleRsProgram;"));
     assert!(
         c_header.contains("typedef struct SouffleRsRelationIterator SouffleRsRelationIterator;")
     );
     assert!(c_header.contains("typedef struct SouffleRsInputComposite {"));
+    assert!(c_header.contains("SouffleRsString declared_type;"));
     assert!(c_header.contains("const SouffleRsInputComposite* composites;"));
     assert!(c_header.contains("size_t composite_count;"));
     assert!(c_header.contains("typedef struct SouffleRsRowOutput {"));
@@ -1129,6 +1130,8 @@ fn compile_runs_souffle_generation_and_writes_metadata() {
     assert!(cxx_wrapper.contains("pack_input_list_value"));
     assert!(cxx_wrapper.contains("pack_input_adt_value"));
     assert!(cxx_wrapper.contains("pack_input_union_value"));
+    assert!(cxx_wrapper.contains("value_declared_type_name"));
+    assert!(cxx_wrapper.contains("input declared type is not a union variant"));
     assert!(!cxx_wrapper.contains("input composite packing is not implemented"));
     assert!(cxx_wrapper.contains("struct CompositeNode"));
     assert!(cxx_wrapper.contains("std::vector<CompositeNode> composites;"));
@@ -1141,6 +1144,7 @@ fn compile_runs_souffle_generation_and_writes_metadata() {
     assert!(cxx_wrapper.contains("struct SchemaAdtVariant"));
     assert!(cxx_wrapper.contains("materialize_adt_value"));
     assert!(cxx_wrapper.contains("materialize_union_value"));
+    assert!(cxx_wrapper.contains("output_value.declared_type = copy_string"));
     assert!(cxx_wrapper.contains("union schema variants have incompatible runtime tags"));
     assert!(cxx_wrapper.contains("adt_variants_ordered"));
     assert!(cxx_wrapper.contains("adt_is_enum"));
@@ -1657,6 +1661,59 @@ fn generated_typed_api_deconflicts_lossy_rust_names() {
     assert!(typed_api.contains("pub value2: String"));
     assert!(typed_api.contains("SomeValue(i64)"));
     assert!(typed_api.contains("SomeValue2(String)"));
+}
+
+#[test]
+fn generated_typed_api_deconflicts_non_rawable_rust_identifiers() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let fake_souffle = fake_souffle_bin(tempdir.path(), 0);
+    let out_dir = tempdir.path().join("out");
+    let entrypoint = tempdir.path().join("logic/main.dl");
+    fs::create_dir_all(entrypoint.parent().unwrap()).unwrap();
+    fs::write(&entrypoint, ".decl KeywordFields(self:number)\n").unwrap();
+
+    let schema = RelationBundle::from_iter([RelationSchema::output(
+        RelationId::new(0),
+        "KeywordFields",
+        [
+            AttributeSchema::new("self", TypeRef::Number),
+            AttributeSchema::new("crate", TypeRef::Number),
+            AttributeSchema::new("super", TypeRef::Number),
+            AttributeSchema::new("Self", TypeRef::Number),
+            AttributeSchema::new("type", TypeRef::Number),
+        ],
+    )]);
+
+    let metadata = Build::new()
+        .program("self", &entrypoint)
+        .souffle_bin(&fake_souffle)
+        .out_dir(&out_dir)
+        .emit_typed_api(true)
+        .emit_typed_api_module(true)
+        .schema_bundle("self", schema)
+        .compile()
+        .unwrap();
+
+    let typed_api_path = metadata.programs[0]
+        .typed_api_artifact
+        .as_ref()
+        .expect("typed API emitted");
+    let typed_api = fs::read_to_string(typed_api_path).unwrap();
+    assert!(typed_api.contains("pub self_: i64"));
+    assert!(typed_api.contains("pub crate_: i64"));
+    assert!(typed_api.contains("pub super_: i64"));
+    assert!(typed_api.contains("pub self_2: i64"));
+    assert!(typed_api.contains("pub r#type: i64"));
+    assert_generated_rust_compiles(typed_api_path);
+
+    let module_path = metadata
+        .typed_api_module_artifact
+        .as_ref()
+        .expect("typed API module emitted");
+    let module = fs::read_to_string(module_path).unwrap();
+    assert!(module.contains("pub mod self_;"));
+    assert!(module.contains("(\"self\", \"self\", \"self\")"));
+    assert_generated_rust_compiles(module_path);
 }
 
 fn fake_souffle_bin(root: &Path, exit_code: i32) -> PathBuf {

@@ -202,8 +202,14 @@ Fired() :- Trigger().
             .expect("read union output")
             .rows(),
         &[
-            Row::new(vec![Value::typed("Bucket", Value::Number(3))]),
-            Row::new(vec![Value::typed("Bucket", Value::Number(101))]),
+            Row::new(vec![Value::typed(
+                "Bucket",
+                Value::typed("Small", Value::Number(3)),
+            )]),
+            Row::new(vec![Value::typed(
+                "Bucket",
+                Value::typed("Small", Value::Number(101)),
+            )]),
         ]
     );
     assert_eq!(

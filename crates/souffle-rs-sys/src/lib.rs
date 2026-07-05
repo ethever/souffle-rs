@@ -23,6 +23,7 @@
 //! let relation = CString::new("Input").unwrap();
 //! let values = [SouffleRsValue {
 //!     kind: SouffleRsValueKind::Number,
+//!     declared_type: souffle_rs_sys::SouffleRsString::null(),
 //!     as_: SouffleRsValueData { number: 7 },
 //! }];
 //! let row = SouffleRsRow {
@@ -47,7 +48,7 @@ use std::{
 use strum::IntoStaticStr;
 
 /// ABI version expected by these Rust bindings.
-pub const SOUFFLE_RS_ABI_VERSION: u32 = 5;
+pub const SOUFFLE_RS_ABI_VERSION: u32 = 6;
 
 /// Status code returned by `souffle-rs` C ABI functions.
 #[repr(i32)]
@@ -162,6 +163,11 @@ pub union SouffleRsValueData {
 pub struct SouffleRsValue {
     /// Discriminant selecting the active payload in `as_`.
     pub kind: SouffleRsValueKind,
+    /// Optional declared Souffle type name carried by typed Rust values.
+    ///
+    /// This is null when runtime kind is sufficient. It is used by wrapper
+    /// code to disambiguate union branches that share the same runtime kind.
+    pub declared_type: SouffleRsString,
     /// ABI payload corresponding to `kind`.
     pub as_: SouffleRsValueData,
 }
@@ -400,7 +406,7 @@ mod tests {
 
     #[test]
     fn abi_version_is_explicit() {
-        assert_eq!(SOUFFLE_RS_ABI_VERSION, 5);
+        assert_eq!(SOUFFLE_RS_ABI_VERSION, 6);
     }
 
     #[test]
