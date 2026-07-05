@@ -500,53 +500,88 @@ impl TypeRef {
     }
 
     pub(crate) fn accepts_value(&self, value: &Value) -> TypeCheck {
-        let definitions = self.named_type_definitions();
+        let Ok(definitions) = self.named_type_definitions() else {
+            return TypeCheck::Mismatch {
+                expected: self.display_name(),
+                actual: "invalid schema".to_owned(),
+            };
+        };
         self.accepts_value_with_definitions(value, &definitions)
     }
 
-    pub(crate) fn named_type_definitions(&self) -> BTreeMap<String, TypeRef> {
+    pub(crate) fn named_type_definitions(&self) -> Result<BTreeMap<String, TypeRef>, SouffleError> {
         let mut definitions = BTreeMap::new();
-        self.collect_named_type_definitions(&mut definitions);
-        definitions
+        let path = self.display_name();
+        self.collect_named_type_definitions("<type>", &path, &mut definitions)?;
+        Ok(definitions)
     }
 
     pub(crate) fn collect_named_type_definitions(
         &self,
+        relation: &str,
+        path: &str,
         definitions: &mut BTreeMap<String, TypeRef>,
-    ) {
+    ) -> Result<(), SouffleError> {
         match self {
             Self::Record(fields) => {
-                for field in fields {
-                    field.collect_named_type_definitions(definitions);
+                for (index, field) in fields.iter().enumerate() {
+                    field.collect_named_type_definitions(
+                        relation,
+                        &format!("{path}.{index}"),
+                        definitions,
+                    )?;
                 }
+                Ok(())
             }
             Self::List(element) => {
-                element.collect_named_type_definitions(definitions);
+                element.collect_named_type_definitions(relation, &format!("{path}[]"), definitions)
             }
             Self::Adt { name, variants, .. } => {
-                if definitions.insert(name.clone(), self.clone()).is_some() {
-                    return;
+                if !register_named_type_definition(relation, path, name, self, definitions)? {
+                    return Ok(());
                 }
-                for fields in variants.values() {
-                    for field in fields {
-                        field.collect_named_type_definitions(definitions);
+                for (variant, fields) in variants {
+                    for (index, field) in fields.iter().enumerate() {
+                        field.collect_named_type_definitions(
+                            relation,
+                            &format!("{path}.{variant}.{index}"),
+                            definitions,
+                        )?;
                     }
                 }
+                Ok(())
             }
-            Self::Subtype { base, .. } | Self::Declared { runtime: base, .. } => {
-                base.collect_named_type_definitions(definitions);
-            }
-            Self::Union { variants, .. } => {
-                for variant in variants {
-                    variant.collect_named_type_definitions(definitions);
+            Self::Subtype { name, base } => {
+                if !register_named_type_definition(relation, path, name, self, definitions)? {
+                    return Ok(());
                 }
+                base.collect_named_type_definitions(relation, path, definitions)
+            }
+            Self::Declared { name, runtime } => {
+                if !register_named_type_definition(relation, path, name, self, definitions)? {
+                    return Ok(());
+                }
+                runtime.collect_named_type_definitions(relation, path, definitions)
+            }
+            Self::Union { name, variants } => {
+                if !register_named_type_definition(relation, path, name, self, definitions)? {
+                    return Ok(());
+                }
+                for (index, variant) in variants.iter().enumerate() {
+                    variant.collect_named_type_definitions(
+                        relation,
+                        &format!("{path}|{index}"),
+                        definitions,
+                    )?;
+                }
+                Ok(())
             }
             Self::Number
             | Self::Unsigned
             | Self::Float
             | Self::Symbol
             | Self::Nullary
-            | Self::Reference { .. } => {}
+            | Self::Reference { .. } => Ok(()),
         }
     }
 
@@ -915,6 +950,27 @@ fn schema_validation_error(
     }
 }
 
+fn register_named_type_definition(
+    relation: &str,
+    path: &str,
+    name: &str,
+    definition: &TypeRef,
+    definitions: &mut BTreeMap<String, TypeRef>,
+) -> Result<bool, SouffleError> {
+    match definitions.get(name) {
+        Some(existing) if existing == definition => Ok(false),
+        Some(_) => Err(schema_validation_error(
+            relation,
+            path,
+            format!("duplicate type definition `{name}` conflicts with earlier definition"),
+        )),
+        None => {
+            definitions.insert(name.to_owned(), definition.clone());
+            Ok(true)
+        }
+    }
+}
+
 /// One relation column with Souffle's declared type preserved.
 ///
 /// # Example
@@ -1119,7 +1175,6 @@ impl RelationSchema {
     /// Validate that the relation schema is internally consistent.
     pub fn validate(&self) -> Result<(), SouffleError> {
         let mut attribute_names = BTreeSet::new();
-        let mut definitions = BTreeMap::new();
         for attribute in &self.attributes {
             if !attribute_names.insert(attribute.name()) {
                 return Err(schema_validation_error(
@@ -1128,11 +1183,9 @@ impl RelationSchema {
                     format!("duplicate attribute name `{}`", attribute.name()),
                 ));
             }
-            attribute
-                .declared_type()
-                .collect_named_type_definitions(&mut definitions);
         }
 
+        let definitions = self.named_type_definitions()?;
         for attribute in &self.attributes {
             attribute.declared_type().validate_schema(
                 &self.name,
@@ -1153,6 +1206,18 @@ impl RelationSchema {
             self.loadable,
             self.printable,
         )
+    }
+
+    pub(crate) fn named_type_definitions(&self) -> Result<BTreeMap<String, TypeRef>, SouffleError> {
+        let mut definitions = BTreeMap::new();
+        for attribute in &self.attributes {
+            attribute.declared_type().collect_named_type_definitions(
+                &self.name,
+                attribute.name(),
+                &mut definitions,
+            )?;
+        }
+        Ok(definitions)
     }
 }
 
@@ -1259,13 +1324,37 @@ impl RelationBundle {
 
     /// Validate all relation schemas and bundle-level relation ids.
     pub fn validate(&self) -> Result<(), SouffleError> {
-        let mut relation_ids = BTreeMap::new();
-        for relation in self.relations.values() {
+        let mut relation_names = BTreeMap::new();
+        for (key, relation) in &self.relations {
             if relation.name().is_empty() {
                 return Err(schema_validation_error(
                     relation.name(),
                     "<relation>",
                     "relation name is empty",
+                ));
+            }
+            if let Some(previous_key) = relation_names.insert(relation.name(), key) {
+                return Err(schema_validation_error(
+                    relation.name(),
+                    "<relation>",
+                    format!(
+                        "duplicate relation name `{}` is also defined by key `{previous_key}`",
+                        relation.name()
+                    ),
+                ));
+            }
+        }
+
+        let mut relation_ids = BTreeMap::new();
+        for (key, relation) in &self.relations {
+            if key != relation.name() {
+                return Err(schema_validation_error(
+                    relation.name(),
+                    "<relation>",
+                    format!(
+                        "relation map key `{key}` does not match relation name `{}`",
+                        relation.name()
+                    ),
                 ));
             }
             if let Some(previous) = relation_ids.insert(relation.id(), relation.name()) {

@@ -163,27 +163,42 @@ Suggested fix:
 
 **Priority:** medium-low
 
-Hand-written schema metadata can define the same named type more than once with
-different structures, and the collector silently overwrites the previous entry.
+**Status:** fixed.
+
+Hand-written schema metadata could previously define the same named type more
+than once with different structures, and the collector silently overwrote the
+previous entry. Relation bundle metadata could also deserialize relations whose
+JSON map keys did not match their declared relation names.
 
 Evidence:
 
-- [`collect_named_type_definitions()` inserts before returning on duplicate names](../crates/souffle-rs/src/schema.rs#L513).
-- [`RelationSchema::validate()` validates against the final collected map](../crates/souffle-rs/src/schema.rs#L1120).
-- [`RelationBundle::insert()` is replace-by-name](../crates/souffle-rs/src/schema.rs#L1236),
-  which is intentional for explicit mutation but means `FromIterator` also keeps
-  the last relation with a duplicated name.
+- [`collect_named_type_definitions()` now returns `SchemaValidation` for conflicting named type definitions](../crates/souffle-rs/src/schema.rs#L519).
+- [`register_named_type_definition()` allows structurally identical duplicates but rejects conflicting definitions](../crates/souffle-rs/src/schema.rs#L953).
+- [`RelationSchema::validate()` builds the named type map before validating attributes](../crates/souffle-rs/src/schema.rs#L1176).
+- [`RelationBundle::validate()` rejects duplicate relation names and relation map key/name mismatches](../crates/souffle-rs/src/schema.rs#L1326).
+- Regression tests cover identical named definitions, duplicate ADT, subtype,
+  union, declared aliases, and duplicate relation names. See
+  [`schema_validation_allows_identical_named_type_definitions`](../crates/souffle-rs/src/tests.rs#L1816),
+  [`schema_validation_rejects_duplicate_adt_definitions`](../crates/souffle-rs/src/tests.rs#L1834),
+  [`schema_validation_rejects_duplicate_subtype_definitions`](../crates/souffle-rs/src/tests.rs#L1843),
+  [`schema_validation_rejects_duplicate_union_definitions`](../crates/souffle-rs/src/tests.rs#L1858),
+  [`schema_validation_rejects_duplicate_declared_definitions`](../crates/souffle-rs/src/tests.rs#L1873),
+  and
+  [`schema_validation_rejects_duplicate_relation_names_from_json`](../crates/souffle-rs/src/tests.rs#L1888).
 
-Impact:
+Impact before fix:
 
 - A manually constructed or externally generated schema can be internally
   inconsistent but still validate, depending on insertion order.
 
-Suggested fix:
+Implemented fix:
 
 - Change named type collection to reject duplicate names unless the definitions
   are structurally identical.
-- Add validation tests for duplicate ADT, subtype, union, and relation names.
+- Register ADT, subtype, union, and declared alias names in the validation
+  definition map.
+- Add validation tests for duplicate ADT, subtype, union, declared alias, and
+  relation names.
 
 ## Panic-Based Memory Constructors
 

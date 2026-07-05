@@ -26,7 +26,7 @@ identified in this pass.
 - [ ] Process backend output parsing is still a custom parser, not an
       authoritative Souffle IO implementation.
       Details: [process IO parser parity](audit-todo-details.md#process-io-parser-parity).
-- [ ] Hand-written schema metadata can silently overwrite duplicate named type
+- [x] Hand-written schema metadata can silently overwrite duplicate named type
       definitions.
       Details: [duplicate schema type definitions](audit-todo-details.md#duplicate-schema-type-definitions).
 

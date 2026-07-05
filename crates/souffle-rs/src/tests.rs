@@ -1813,6 +1813,141 @@ fn schema_validation_rejects_adt_without_variant_order() {
 }
 
 #[test]
+fn schema_validation_allows_identical_named_type_definitions() {
+    let small = TypeRef::Subtype {
+        name: "Small".to_owned(),
+        base: Box::new(TypeRef::Number),
+    };
+    let schema = RelationSchema::input(
+        RelationId::new(0),
+        "Input",
+        [
+            AttributeSchema::new("left", small.clone()),
+            AttributeSchema::new("right", small),
+        ],
+    );
+
+    schema.validate().expect("identical named types validate");
+}
+
+#[test]
+fn schema_validation_rejects_duplicate_adt_definitions() {
+    assert_duplicate_type_definition_error(
+        TypeRef::adt("Choice", [("Some".to_owned(), vec![TypeRef::Number])]),
+        TypeRef::adt("Choice", [("Some".to_owned(), vec![TypeRef::Symbol])]),
+        "Choice",
+    );
+}
+
+#[test]
+fn schema_validation_rejects_duplicate_subtype_definitions() {
+    assert_duplicate_type_definition_error(
+        TypeRef::Subtype {
+            name: "Small".to_owned(),
+            base: Box::new(TypeRef::Number),
+        },
+        TypeRef::Subtype {
+            name: "Small".to_owned(),
+            base: Box::new(TypeRef::Symbol),
+        },
+        "Small",
+    );
+}
+
+#[test]
+fn schema_validation_rejects_duplicate_union_definitions() {
+    assert_duplicate_type_definition_error(
+        TypeRef::Union {
+            name: "Bucket".to_owned(),
+            variants: vec![TypeRef::Number],
+        },
+        TypeRef::Union {
+            name: "Bucket".to_owned(),
+            variants: vec![TypeRef::Symbol],
+        },
+        "Bucket",
+    );
+}
+
+#[test]
+fn schema_validation_rejects_duplicate_declared_definitions() {
+    assert_duplicate_type_definition_error(
+        TypeRef::Declared {
+            name: "Alias".to_owned(),
+            runtime: Box::new(TypeRef::Number),
+        },
+        TypeRef::Declared {
+            name: "Alias".to_owned(),
+            runtime: Box::new(TypeRef::Symbol),
+        },
+        "Alias",
+    );
+}
+
+#[test]
+fn schema_validation_rejects_duplicate_relation_names_from_json() {
+    let error = RelationBundle::from_json_str(
+        r#"{
+            "Left": {
+                "id": 0,
+                "name": "Duplicate",
+                "kind": "input",
+                "attributes": [{"name": "id", "declared_type": "number"}],
+                "loadable": true,
+                "printable": false
+            },
+            "Right": {
+                "id": 1,
+                "name": "Duplicate",
+                "kind": "output",
+                "attributes": [{"name": "id", "declared_type": "number"}],
+                "loadable": false,
+                "printable": true
+            }
+        }"#,
+    )
+    .unwrap_err();
+
+    match error {
+        SouffleError::SchemaValidation {
+            relation,
+            path,
+            message,
+        } => {
+            assert_eq!(relation, "Duplicate");
+            assert_eq!(path, "<relation>");
+            assert!(message.contains("duplicate relation name `Duplicate`"));
+        }
+        error => panic!("expected schema validation error, got {error:?}"),
+    }
+}
+
+fn assert_duplicate_type_definition_error(left: TypeRef, right: TypeRef, name: &str) {
+    let schema = RelationSchema::input(
+        RelationId::new(0),
+        "Input",
+        [
+            AttributeSchema::new("left", left),
+            AttributeSchema::new("right", right),
+        ],
+    );
+
+    let error = schema.validate().unwrap_err();
+    match error {
+        SouffleError::SchemaValidation {
+            relation,
+            path,
+            message,
+        } => {
+            assert_eq!(relation, "Input");
+            assert_eq!(path, "right");
+            assert!(message.contains(&format!("duplicate type definition `{name}`")));
+        }
+        error => panic!("expected schema validation error, got {error:?}"),
+    }
+}
+
+#[test]
 fn run_options_keep_explicit_thread_count() {
     let mut program = InMemoryProgram::builder("analysis")
         .threads(NonZeroUsize::new(4).unwrap())
