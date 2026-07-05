@@ -68,7 +68,7 @@ pub(crate) fn encode_input_row(
         composite_values: Vec::new(),
         composites: Vec::new(),
     };
-    let definitions = named_type_definitions(schema);
+    let definitions = schema.named_type_definitions()?;
 
     for (attribute, value) in schema.attributes().iter().zip(row.values()) {
         let encoded_value = encode_input_value(
@@ -448,16 +448,6 @@ fn type_ref_declared_name<'a>(
             _ => None,
         },
     }
-}
-
-fn named_type_definitions(schema: &RelationSchema) -> BTreeMap<String, TypeRef> {
-    let mut definitions = BTreeMap::new();
-    for attribute in schema.attributes() {
-        attribute
-            .declared_type()
-            .collect_named_type_definitions(&mut definitions);
-    }
-    definitions
 }
 
 fn push_input_composite(

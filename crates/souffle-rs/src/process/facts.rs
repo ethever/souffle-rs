@@ -157,7 +157,7 @@ pub(super) fn ensure_relation_supported(
     backend: Backend,
     relation: &RelationSchema,
 ) -> Result<(), SouffleError> {
-    let definitions = named_type_definitions(relation);
+    let definitions = relation.named_type_definitions()?;
     for attribute in relation.attributes() {
         ensure_type_supported(
             backend,
@@ -176,7 +176,7 @@ pub(super) fn ensure_row_fact_encodable(
     relation: &RelationSchema,
     row: &Row,
 ) -> Result<(), SouffleError> {
-    let definitions = named_type_definitions(relation);
+    let definitions = relation.named_type_definitions()?;
     for (attribute, value) in relation.attributes().iter().zip(row.values()) {
         encode_fact_value(
             relation,
@@ -228,7 +228,7 @@ fn write_fact_row(
     row: &Row,
     path: &Path,
 ) -> Result<(), SouffleError> {
-    let definitions = named_type_definitions(relation);
+    let definitions = relation.named_type_definitions()?;
     for (index, (attribute, value)) in relation.attributes().iter().zip(row.values()).enumerate() {
         if index > 0 {
             writer
@@ -257,7 +257,7 @@ fn parse_output_row(
     line: &str,
     path: &Path,
 ) -> Result<Row, SouffleError> {
-    let definitions = named_type_definitions(relation);
+    let definitions = relation.named_type_definitions()?;
     let fields = split_output_fields(relation, line, path)?;
     if fields.len() != relation.arity() {
         return Err(SouffleError::ArtifactDecodeFailed {
@@ -921,16 +921,6 @@ fn type_ref_declared_name<'a>(
             _ => None,
         },
     }
-}
-
-fn named_type_definitions(relation: &RelationSchema) -> BTreeMap<String, TypeRef> {
-    let mut definitions = BTreeMap::new();
-    for attribute in relation.attributes() {
-        attribute
-            .declared_type()
-            .collect_named_type_definitions(&mut definitions);
-    }
-    definitions
 }
 
 fn resolve_type_ref<'a>(

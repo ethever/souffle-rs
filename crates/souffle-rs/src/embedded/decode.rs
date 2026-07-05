@@ -30,7 +30,7 @@ pub(crate) fn decode_row_output(
 
     let output = MaterializedRowOutput::new(raw);
     let relation_view = output.relation_view();
-    let definitions = named_type_definitions(schema);
+    let definitions = schema.named_type_definitions()?;
     decode_output_row(schema, &relation_view, output.raw_row(), &definitions)
 }
 
@@ -105,7 +105,7 @@ fn decode_rows(
     schema: &RelationSchema,
     output: &SouffleRsRelationOutput,
 ) -> Result<Vec<Row>, SouffleError> {
-    let definitions = named_type_definitions(schema);
+    let definitions = schema.named_type_definitions()?;
     let raw_rows = if output.len == 0 {
         &[]
     } else if output.rows.is_null() {
@@ -606,16 +606,6 @@ fn type_ref_declared_name<'a>(
             .or(Some(name)),
         _ => None,
     }
-}
-
-fn named_type_definitions(schema: &RelationSchema) -> BTreeMap<String, TypeRef> {
-    let mut definitions = BTreeMap::new();
-    for attribute in schema.attributes() {
-        attribute
-            .declared_type()
-            .collect_named_type_definitions(&mut definitions);
-    }
-    definitions
 }
 
 fn abi_kind_name(kind: SouffleRsValueKind) -> &'static str {
