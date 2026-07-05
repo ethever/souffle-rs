@@ -18,13 +18,24 @@ The repository includes runnable standalone example packages under
 embedded build-script example is opt-in because it needs Souffle headers and a
 C++ compiler during Cargo's build-script phase:
 
+| Schema source | API/backend shape | Cargo build script | Example |
+| --- | --- | --- | --- |
+| Hand-written `RelationBundle` | Runtime dynamic API | No | `dynamic-api` |
+| Hand-written `RelationBundle` | Generated typed/native API | Yes | `embedded-build` |
+| Extracted from Souffle | Artifact export only | No | `auto-schema` |
+| Extracted from Souffle | Generated typed/native API | Yes | `embedded-auto-schema` |
+
 ```bash
 cargo run -p souffle-rs-example-dynamic-api
+cargo run -p souffle-rs-example-auto-schema
 cargo run -p souffle-rs-example-build-plan
 ```
 
 `dynamic-api` builds a schema-backed runtime facade, inserts rows, runs the
 program facade, and reads printable output through the shared `Program` API.
+`auto-schema` reads `examples/auto-schema/logic/reachability.dl`, runs schema
+extraction without a hand-written `RelationBundle`, validates the generated
+schema JSON, and prints the generated schema and typed API artifact paths.
 `build-plan` reads `examples/build-plan/logic/reachability.dl`, shows the
 minimal `build.rs` configuration for one Souffle program, and prints the planned
 `souffle` command, Cargo directives, and typed Rust API artifact path without
@@ -46,11 +57,15 @@ For the full embedded Cargo build flow, run the opt-in example directly:
 
 ```bash
 cargo run --manifest-path examples/embedded-build/Cargo.toml
+cargo run --manifest-path examples/embedded-auto-schema/Cargo.toml
 ```
 
-It demonstrates `logic/reachability.dl -> build.rs -> souffle-rs-build ->
-generated C++/schema/typed API -> native library -> EmbeddedProgram` with the
-generated typed Rust API used from `src/main.rs`. Set
+`embedded-build` demonstrates `logic/reachability.dl -> build.rs ->
+souffle-rs-build -> generated C++/schema/typed API -> native library ->
+EmbeddedProgram` with a hand-written schema bundle. `embedded-auto-schema`
+demonstrates the same Cargo build-script flow, but lets `souffle-rs-build`
+extract schema metadata before emitting the generated typed Rust API used from
+`src/main.rs`. Set
 `SOUFFLE_RS_SOUFFLE_BIN` and `SOUFFLE_RS_SOUFFLE_INCLUDE` if Souffle is not
 discoverable from `PATH` and its install prefix.
 
@@ -130,6 +145,30 @@ The generated metadata records the Souffle binary, entrypoints, macros,
 include/library directories, generated namespace, output mode, OpenMP settings,
 link mode, native compiler inputs, wrapper/header artifacts, schema artifacts,
 typed API artifacts, external libraries, and ABI version.
+
+### Schema metadata
+
+Build integrations have two schema sources:
+
+- Pass an explicit `.schema_bundle(program, schema)` when the Rust build script
+  already knows the relation schema. This is the most reliable path for
+  production typed API generation because the schema is normal Rust data and is
+  validated before artifacts are emitted.
+- Omit `.schema_bundle(...)` when schema-dependent artifacts are requested and
+  let `souffle-rs-build` extract schema metadata by running
+  `souffle --show=transformed-ast`.
+
+Automatic extraction is useful, but it is not a full Souffle parser. The current
+extractor reads Souffle's transformed AST output as text: relation `params` and
+`types` payloads are parsed as JSON, while surrounding `.decl`, `.input`,
+`.output`, and `.type` directives are discovered with line-oriented string
+matching and top-level delimiter splitting. That means the extractor can lag
+behind Souffle syntax and metadata formatting changes. A known current weakness
+is subtype hierarchy extraction: subtype declarations whose base is another
+declared subtype, such as `.type B <: A`, are not preserved as a subtype chain
+and fall back to a runtime-compatible declared type. For uncommon type syntax or
+schema-critical generated APIs, prefer a hand-written `RelationBundle` or add
+tests that assert the extracted schema shape you rely on.
 
 ## Runtime usage
 
