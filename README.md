@@ -15,8 +15,8 @@ The detailed implementation goal is tracked in
 
 The repository includes runnable standalone example packages under
 [`examples/`](examples/). The lightweight examples are workspace members; the
-embedded build-script example is opt-in because it needs Souffle headers and a
-C++ compiler during Cargo's build-script phase:
+embedded build-script examples are opt-in because they need Souffle headers and
+a C++ compiler during Cargo's build-script phase:
 
 | Schema source | API/backend shape | Cargo build script | Example |
 | --- | --- | --- | --- |
@@ -24,6 +24,7 @@ C++ compiler during Cargo's build-script phase:
 | Hand-written `RelationBundle` | Generated typed/native API | Yes | `embedded-build` |
 | Extracted from Souffle | Artifact export only | No | `auto-schema` |
 | Extracted from Souffle | Generated typed/native API | Yes | `embedded-auto-schema` |
+| Hand-written `RelationBundle` plus C++ addon | Generated typed/native API | Yes | `souffle-addon` |
 
 ```bash
 cargo run -p souffle-rs-example-dynamic-api
@@ -58,6 +59,7 @@ For the full embedded Cargo build flow, run the opt-in example directly:
 ```bash
 cargo run --manifest-path examples/embedded-build/Cargo.toml
 cargo run --manifest-path examples/embedded-auto-schema/Cargo.toml
+cargo run --manifest-path examples/souffle-addon/Cargo.toml
 ```
 
 `embedded-build` demonstrates `logic/reachability.dl -> build.rs ->
@@ -65,7 +67,10 @@ souffle-rs-build -> generated C++/schema/typed API -> native library ->
 EmbeddedProgram` with a hand-written schema bundle. `embedded-auto-schema`
 demonstrates the same Cargo build-script flow, but lets `souffle-rs-build`
 extract schema metadata before emitting the generated typed Rust API used from
-`src/main.rs`. Set
+`src/main.rs`. `souffle-addon` additionally compiles
+`native/number_addon.cpp` into a Souffle user-defined functor library, passes it
+to Souffle with `FunctorLibrary`, and runs the generated embedded program
+against `@plus_one(value)`. Set
 `SOUFFLE_RS_SOUFFLE_BIN` and `SOUFFLE_RS_SOUFFLE_INCLUDE` if Souffle is not
 discoverable from `PATH` and its install prefix.
 

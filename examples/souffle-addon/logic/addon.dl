@@ -1,0 +1,9 @@
+.functor plus_one(value:number):number
+
+.decl Input(value:number)
+.input Input
+
+.decl Output(value:number)
+.output Output
+
+Output(@plus_one(value)) :- Input(value).
